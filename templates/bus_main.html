@@ -16,7 +16,7 @@
   --text-color: #2c3e50;
   --card-bg: #ffffff;
   --table-head-bg: #2c3e50;
-  --header-bg: linear-gradient(90deg, #3a6073, #16222a);
+  --header-bg: linear-gradient(180deg, #111827 0%, #1f2937 100%);
   --accent: #626e70;
 }
 
@@ -25,7 +25,7 @@ body.dark {
   --text-color: #e2e8f0;
   --card-bg: #2b3037;
   --table-head-bg: #3a3f47;
-  --header-bg: linear-gradient(90deg, #0f2027, #203a43, #2c5364);
+  --header-bg: linear-gradient(180deg, #111827 0%, #1f2937 100%); 
   --accent: #8ecae6;
 }
 
@@ -253,7 +253,7 @@ button.refresh { grid-column: 3; justify-self: end; }
 <div class="content">
 
 <header>
-  Smart Bus Dashboard – Singapore Live
+ Hi {{ session.username if session.username else 'Guest' }}! 👋
   <button id="darkToggle" onclick="toggleDark()">🌙</button>
 </header>
 
@@ -294,18 +294,155 @@ const cluster = L.markerClusterGroup(); map.addLayer(cluster);
 let activeStop="", activeStopName="";
 let favoriteStops = JSON.parse(localStorage.getItem("favorites") || "[]");
 let compareStops = [];
+let savedLocationMarkers = []; // Array to store saved location markers
 
+// Load Favourite Bus Stops from API
+// UPDATED: Load favorites from database instead of localStorage
+
+async function loadFavoritesFromDB() {
+  try {
+    const response = await fetch('/api/bus_favorites');
+    favoriteStops = await response.json();
+    updateFavDisplay();
+    console.log(`✅ Loaded ${favoriteStops.length} favorite bus stops`);
+  } catch (error) {
+    console.error('Failed to load favorites:', error);
+  }
+}
+
+
+
+// UPDATED: Add favorite Bus Stops to database
+
+async function addFavorite(code, desc) {
+  if (favoriteStops.find(f => f.code === code)) {
+    alert("Already added!");
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/bus_favorites/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, desc })
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+      favoriteStops.push({ code, desc });
+      updateFavDisplay();
+    } else {
+      alert("Failed to add favorite: " + (result.error || "Unknown error"));
+    }
+  } catch (error) {
+    console.error('Error adding favorite:', error);
+    alert("Failed to add favorite");
+  }
+}
+
+
+// UPDATED: Remove favorite from database
+
+async function removeFavorite(code) {
+  try {
+    const response = await fetch('/api/bus_favorites/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+      favoriteStops = favoriteStops.filter(f => f.code !== code);
+      updateFavDisplay();
+    } else {
+      alert("Failed to remove favorite: " + (result.error || "Unknown error"));
+    }
+  } catch (error) {
+    console.error('Error removing favorite:', error);
+    alert("Failed to remove favorite");
+  }
+}
+
+//Update users favorite stops
 function updateFavDisplay(){
-  const favDiv=document.getElementById("favList");
-  favDiv.innerHTML="";
-  favoriteStops.forEach(f=>{
-    const div=document.createElement("div");
-    div.className="favorite-stop";
-    div.innerHTML=`${f.desc}<span class="delete" onclick="removeFavorite('${f.code}')">🗑</span>`;
-    div.onclick=()=>loadArrivals(f.code,f.desc);
+  const favDiv = document.getElementById("favList");
+  favDiv.innerHTML = "";
+  favoriteStops.forEach(f => {
+    const div = document.createElement("div");
+    div.className = "favorite-stop";
+    div.innerHTML = `${f.desc}<span class="delete" onclick="removeFavorite('${f.code}')">🗑</span>`;
+    div.onclick = () => loadArrivals(f.code, f.desc);
     favDiv.appendChild(div);
   });
 }
+
+
+
+
+
+
+// Add user's saved locations in settings to map----- NOT WORKING ------
+async function loadUserSavedLocations() {
+  try {
+    const response = await fetch('/api/user_locations');
+    const locations = await response.json();
+    
+    // Clear existing saved location markers
+    savedLocationMarkers.forEach(marker => map.removeLayer(marker));
+    savedLocationMarkers = [];
+    
+    // Add markers for each saved location
+    locations.forEach(loc => {
+      if (loc.lat && loc.lng) {
+        // Create custom icon for saved locations
+        const icon = loc.is_favourite 
+          ? L.icon({
+              iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',
+              shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+              iconSize: [25, 41],
+              iconAnchor: [12, 41],
+              popupAnchor: [1, -34],
+              shadowSize: [41, 41]
+            })
+          : L.icon({
+              iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+              shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+              iconSize: [25, 41],
+              iconAnchor: [12, 41],
+              popupAnchor: [1, -34],
+              shadowSize: [41, 41]
+            });
+        
+        const marker = L.marker([loc.lat, loc.lng], { icon: icon });
+        
+        // Create popup content
+        const popupContent = `
+          <div style="min-width: 200px;">
+            <h3 style="margin: 0 0 8px 0; color: #2d4a9d; font-size: 16px;">
+              ${loc.is_favourite ? '🌟 ' : '📍 '}${loc.label}
+            </h3>
+            ${loc.address ? `<p style="margin: 4px 0; font-size: 13px;"><strong>Address:</strong><br>${loc.address}</p>` : ''}
+            ${loc.postal_code ? `<p style="margin: 4px 0; font-size: 13px;"><strong>Postal Code:</strong> ${loc.postal_code}</p>` : ''}
+            <p style="margin: 8px 0 4px 0; font-size: 12px; color: #666;">
+              ${loc.is_favourite ? 'Default Location' : 'Saved Location'}
+            </p>
+          </div>
+        `;
+        
+        marker.bindPopup(popupContent);
+        marker.addTo(map);
+        savedLocationMarkers.push(marker);
+      }
+    });
+    
+    console.log(`✅ Loaded ${locations.length} saved location(s)`);
+  } catch (error) {
+    console.error('Failed to load saved locations:', error);
+  }
+}
+
+
 
 async function loadAllStops(){
  const res=await fetch("bus_stops");
@@ -320,6 +457,11 @@ async function loadAllStops(){
    cluster.addLayer(m);
  });
  map.fitBounds(cluster.getBounds());
+ // Load user's saved locations after bus stops are loaded
+ loadUserSavedLocations();
+ 
+ // Load favorites from database
+ loadFavoritesFromDB();
 }
 loadAllStops();
 
@@ -346,18 +488,18 @@ function manualRefresh(){ if(activeStop) loadArrivals(activeStop,activeStopName)
 setInterval(()=>{ if(activeStop) loadArrivals(activeStop,activeStopName); refreshCompare(); },60000);
 
 /* FAVORITES */
-function addFavorite(code,desc){
-  if(!favoriteStops.find(f=>f.code===code)){
-    favoriteStops.push({code,desc});
-    localStorage.setItem("favorites",JSON.stringify(favoriteStops));
-    updateFavDisplay();
-  } else alert("Already added!");
-}
-function removeFavorite(code){
-  favoriteStops=favoriteStops.filter(f=>f.code!==code);
-  localStorage.setItem("favorites",JSON.stringify(favoriteStops));
-  updateFavDisplay();
-}
+// function addFavorite(code,desc){
+//   if(!favoriteStops.find(f=>f.code===code)){
+//     favoriteStops.push({code,desc});
+//     localStorage.setItem("favorites",JSON.stringify(favoriteStops));
+//     updateFavDisplay();
+//   } else alert("Already added!");
+// }
+// function removeFavorite(code){
+//   favoriteStops=favoriteStops.filter(f=>f.code!==code);
+//   localStorage.setItem("favorites",JSON.stringify(favoriteStops));
+//   updateFavDisplay();
+// }
 
 /* DARK MODE (map stays light) */
 function toggleDark(){

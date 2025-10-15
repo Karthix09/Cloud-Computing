@@ -48,7 +48,7 @@ def login():
         return render_template("login.html"), 401
     session["user_id"] = row["id"]
     session["username"] = row["username"]
-    return redirect("/traffic")
+    return redirect("/bus")
 
 
 @auth_bp.route("/logout")
@@ -84,13 +84,14 @@ def register():
     return redirect(url_for("auth.login"))
 
 
+
 @auth_bp.route("/settings")
 @login_required
 def settings():
     user = current_user()
     with get_db() as conn:
         locs = conn.execute(
-            "SELECT id,label,latitude,longitude,is_primary "
+            "SELECT id, label, latitude, longitude, address, postal_code, is_favourite " # Added address, postal_code for viewing in settings page
             "FROM locations WHERE user_id=? "
             "ORDER BY is_primary DESC, id DESC",
             (user["id"],)
@@ -129,13 +130,18 @@ def add_location():
     label = request.form["label"].strip()          # e.g., "Home Stop 01012"
     lat   = request.form.get("latitude") or None
     lon   = request.form.get("longitude") or None
+    address = request.form.get("address", "").strip()
+    postal_code = request.form.get("postal_code", "").strip();
+
     with get_db() as conn:
         conn.execute(
-            "INSERT INTO locations (user_id,label,latitude,longitude,is_primary) VALUES (?,?,?,?,0)",
-            (user["id"], label, lat, lon)
+            "INSERT INTO locations (user_id,label,latitude,longitude,address,postal_code,is_favourite) VALUES (?,?,?,?,?,?,0)",
+            (user["id"], label, lat, lon, address, postal_code)
         )
         conn.commit()
+    flash("Location added successfully.", "success")
     return redirect(url_for("auth.settings"))
+
 
 @auth_bp.route("/delete_location/<int:loc_id>", methods=["POST"])
 @login_required
@@ -143,10 +149,11 @@ def delete_location(loc_id):
     user = current_user()
     with get_db() as conn:
         conn.execute(
-            "DELETE FROM locations WHERE id=? AND user_id=? AND is_primary=0",
+            "DELETE FROM locations WHERE id=? AND user_id=? AND is_favourite=0",
             (loc_id, user["id"])
         )
         conn.commit()
+    flash("Location deleted.", "success")
     return redirect(url_for("auth.settings"))
 
 
@@ -159,10 +166,11 @@ def delete_locations():
         qmarks = ",".join("?" for _ in ids)
         with get_db() as conn:
             conn.execute(
-                f"DELETE FROM locations WHERE id IN ({qmarks}) AND user_id=? AND is_primary=0",
+                f"DELETE FROM locations WHERE id IN ({qmarks}) AND user_id=? AND is_favourite=0",
                 (*ids, user["id"])
             )
             conn.commit()
+        flash(f"{len(ids)} location(s) deleted.", "success")
     return redirect(url_for("auth.settings"))
 
 
@@ -174,4 +182,17 @@ def primary_location(loc_id):
         conn.execute("UPDATE locations SET is_primary=0 WHERE user_id=?", (user["id"],))
         conn.execute("UPDATE locations SET is_primary=1 WHERE id=? AND user_id=?", (loc_id, user["id"]))
         conn.commit()
+    return redirect(url_for("auth.settings"))
+
+
+@auth_bp.route("/favourite_location/<int:loc_id>", methods=["POST"])
+@login_required
+def favourite_location(loc_id):
+    user = current_user()
+    with get_db() as conn:
+        conn.execute("UPDATE locations SET is_favourite=0 WHERE user_id=?", (user["id"],))
+        conn.execute("UPDATE locations SET is_favourite=1 WHERE id=? AND user_id=?", 
+                     (loc_id, user["id"]))
+        conn.commit()
+    flash("Default location updated.", "success")
     return redirect(url_for("auth.settings"))

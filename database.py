@@ -31,5 +31,16 @@ def init_users_db():
         FOREIGN KEY(user_id) REFERENCES users(id)
     )''')
 
+    # NEW TABLE for bus stop favorites
+    c.execute('''CREATE TABLE IF NOT EXISTS bus_favorites (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        bus_stop_code TEXT,
+        bus_stop_name TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, bus_stop_code),
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    )''')
+
     conn.commit()
     conn.close()

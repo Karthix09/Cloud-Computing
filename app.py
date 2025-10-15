@@ -8,7 +8,8 @@ from sqlalchemy import create_engine, Table, Column, String, Float, MetaData, Da
 
 # Import auth module
 from database import init_users_db
-from auth import auth_bp, login_required, current_user
+from auth import auth_bp, login_required, current_user, USERS_DB
+
 
 # Initialize users database
 init_users_db()
@@ -231,6 +232,158 @@ def bus_history_all():
 @app.route("/bus")
 def bus_dashboard():
     return render_template("bus_main.html")
+
+# API to get users favorite locations and show on the smart bus dashboard
+@app.route("/api/user_locations")
+@login_required
+def get_user_locations():
+    """API endpoint to get current user's saved locations"""
+    user = current_user()
+    if not user:
+        return jsonify([])
+    
+    # Use the same database and connection method as auth.py
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    USERS_DB = os.path.join(BASE_DIR, "users.db")
+    
+    conn = sqlite3.connect(USERS_DB)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT id, label, latitude, longitude, address, postal_code, is_favourite
+            FROM locations
+            WHERE user_id = ?
+            ORDER BY is_favourite DESC, id DESC
+        """, (user["id"],))
+        
+        locations = []
+        for row in cursor.fetchall():
+            locations.append({
+                "id": row["id"],
+                "label": row["label"],
+                "lat": row["latitude"],
+                "lng": row["longitude"],
+                "address": row["address"] if row["address"] else "",
+                "postal_code": row["postal_code"] if row["postal_code"] else "",
+                "is_favourite": bool(row["is_favourite"])
+            })
+        
+        return jsonify(locations)
+    except Exception as e:
+        print(f"Error fetching user locations: {e}")
+        return jsonify([])
+    finally:
+        conn.close()
+
+
+
+
+# ==================== BUS FAVORITES API ====================
+
+# Get user's favorite bus stops
+
+@app.route("/api/bus_favorites", methods=["GET"])
+@login_required
+def get_bus_favorites():
+    """Get current user's favorite bus stops"""
+    user = current_user()
+    if not user:
+        return jsonify([])
+    
+    conn = sqlite3.connect(USERS_DB)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT bus_stop_code, bus_stop_name
+            FROM bus_favorites
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+        """, (user["id"],))
+        
+        favorites = []
+        for row in cursor.fetchall():
+            favorites.append({
+                "code": row["bus_stop_code"],
+                "desc": row["bus_stop_name"]
+            })
+        
+        return jsonify(favorites)
+    except Exception as e:
+        print(f"Error fetching bus favorites: {e}")
+        return jsonify([])
+    finally:
+        conn.close()
+
+#Add to bus stops to favorites
+
+@app.route("/api/bus_favorites/add", methods=["POST"])
+@login_required
+def add_bus_favorite():
+    """Add a bus stop to user's favorites"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "Not logged in"}), 401
+    
+    data = request.get_json()
+    code = data.get("code")
+    desc = data.get("desc")
+    
+    if not code or not desc:
+        return jsonify({"error": "Missing bus stop info"}), 400
+    
+    conn = sqlite3.connect(USERS_DB)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            INSERT OR IGNORE INTO bus_favorites (user_id, bus_stop_code, bus_stop_name)
+            VALUES (?, ?, ?)
+        """, (user["id"], code, desc))
+        conn.commit()
+        return jsonify({"success": True, "message": "Added to favorites"})
+    except Exception as e:
+        print(f"Error adding bus favorite: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+# Delete bus stop from favorites
+
+@app.route("/api/bus_favorites/remove", methods=["POST"])
+@login_required
+def remove_bus_favorite():
+    """Remove a bus stop from user's favorites"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "Not logged in"}), 401
+    
+    data = request.get_json()
+    code = data.get("code")
+    
+    if not code:
+        return jsonify({"error": "Missing bus stop code"}), 400
+    
+    conn = sqlite3.connect(USERS_DB)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            DELETE FROM bus_favorites
+            WHERE user_id = ? AND bus_stop_code = ?
+        """, (user["id"], code))
+        conn.commit()
+        return jsonify({"success": True, "message": "Removed from favorites"})
+    except Exception as e:
+        print(f"Error removing bus favorite: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
 
 # ==================== TRAFFIC MODULE ====================
 
