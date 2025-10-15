@@ -333,7 +333,7 @@ function getETA(value){
 
 async function loadArrivals(code, desc){
  activeStop=code; activeStopName=desc;
- const res=await fetch(`bus_arrivals/${code}`);
+ const res=await fetch(`/bus_arrivals/${code}`);
  const data=await res.json();
  const body=document.getElementById('arrivalBody');
  body.innerHTML=data.length?data.map(b=>`
@@ -372,7 +372,7 @@ async function addCompare(code,desc){
   await renderCompareCard(code,desc);
 }
 async function renderCompareCard(code,desc){
-  const res=await fetch(`bus_arrivals/${code}`);
+  const res=await fetch(`/bus_arrivals/${code}`);
   const data=await res.json();
   const existing=document.getElementById("cmp-"+code);
   if(existing) existing.remove();

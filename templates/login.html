@@ -2,24 +2,43 @@
 <html>
 <head>
   <title>Login</title>
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-  <div class="container">
-    <h2>Welcome Back 👋</h2>
-    <p>Please sign in to your account</p>
+  <script type="module">
+    import { createSidebar } from "{{ url_for('static', filename='navbar.js') }}";
+    console.log("Script loaded!");
+    createSidebar("login");
+    console.log("Sidebar created!");
+  </script>
 
-    <form method="post" action="/login">
-      <label>Username</label>
-      <input type="text" name="username" placeholder="Enter username" required>
+  <div class="content">
+    <div class="container small">
+      <h2>Welcome Back 👋</h2>
+      <p>Please sign in to your account</p>
 
-      <label>Password</label>
-      <input type="password" name="password" placeholder="Enter password" required>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <p class="flash-message flash-{{ category }}">
+            {{ message }}
+          </p>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
 
-      <button type="submit">Login</button>
-    </form>
+      <form method="post" action="/login">
+        <label>Username</label>
+        <input type="text" name="username" placeholder="Enter username" required>
 
-    <p class="note">Don't have an account? <a href="/register">Register here</a></p>
+        <label>Password</label>
+        <input type="password" name="password" placeholder="Enter password" required>
+
+        <button type="submit">Login</button>
+      </form>
+
+      <p class="note">Don't have an account? <a href="/register">Register here</a></p>
+    </div>
   </div>
 </body>
 </html>

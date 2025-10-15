@@ -2,8 +2,8 @@
 <html>
 <head>
   <title>User Settings</title>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDqQ73BXm5hIMOBJ1UBkDeLPs0Kkig2ffE&libraries=places"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <!-- Remove the Google Maps script from here -->
   <style>
     .section {
       margin-top: 30px;
@@ -75,107 +75,126 @@
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="top-bar">
-      <h2>User Settings ⚙️</h2>
-      <form action="/logout" method="get" style="margin:0;">
-        <button class="logout-btn" type="submit">Logout</button>
-      </form>
-    </div>
-    <p>Welcome, <strong>{{ user['username'] }}</strong></p>
+  <!-- Load sidebar first -->
+  <script type="module">
+    import { createSidebar } from "{{ url_for('static', filename='navbar.js') }}";
+    createSidebar("settings");
+  </script>
 
-    <!-- Profile Section -->
-    <div class="section">
-      <h3>Profile Information</h3>
-      <p><strong>Date of Birth:</strong> {{ user['date_of_birth'] }}</p>
+  <div class="content">
+    <div class="container">
+      <div class="top-bar">
+        <h2>User Settings ⚙️</h2>
+        <form action="/logout" method="get" style="margin:0;">
+          <button class="logout-btn" type="submit">Logout</button>
+        </form>
+      </div>
+      <p>Welcome, <strong>{{ user['username'] }}</strong></p>
 
-      <form method="post" action="/update_profile">
-        <label>Current Password (Required To Update)</label>
-        <input type="password" name="current_password" placeholder="Enter current password" required>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+            <p class="flash-message flash-{{ category }}">
+                {{ message }}
+            </p>
+            {% endfor %}
+        {% endif %}
+        {% endwith %}
 
-        <label>Email</label>
-        <input type="email" name="email" value="{{ user['email'] }}">
+      <!-- Profile Section -->
+      <div class="section">
+        <h3>Profile Information</h3>
+        <p><strong>Date of Birth:</strong> {{ user['date_of_birth'] }}</p>
 
-        <label>Phone Number</label>
-        <input type="text" name="phone" value="{{ user['phone'] }}">
+        <form method="post" action="/update_profile">
+          <label>Current Password (Required To Update)</label>
+          <input type="password" name="current_password" placeholder="Enter current password" required>
 
-        <label>New Password</label>
-        <input type="password" name="new_password" placeholder="Leave blank if not changing">
+          <label>Email</label>
+          <input type="email" name="email" value="{{ user['email'] }}">
 
-        <button type="submit">Update Profile</button>
-      </form>
-    </div>
+          <label>Phone Number</label>
+          <input type="text" name="phone" value="{{ user['phone'] }}">
 
-    <!-- Saved Locations Section -->
-    <div class="section">
-      <h3>Saved Locations</h3>
-      <form method="post" action="/delete_locations" id="deleteForm" onsubmit="return validateDeleteSelection();">
-        <table>
-          <tr>
-            <th><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"></th>
-            <th>Label</th>
-            <th>Address</th>
-            <th>Postal Code</th>
-            <th>Default Location</th>
-            <th>Actions</th>
-          </tr>
-          {% for loc in locations %}
-          <tr>
-            <td>
-              {% if not loc['is_favourite'] %}
-              <input type="checkbox" name="delete_ids" value="{{ loc['id'] }}">
-              {% endif %}
-            </td>
-            <td>{{ loc['label'] }}</td>
-            <td>{{ loc['address'] if loc['address'] else 'N/A' }}</td>
-            <td>{{ loc['postal_code'] if loc['postal_code'] else 'N/A' }}</td>
-            <td>
-              {% if loc['is_favourite'] %}
-                🌟 Default
-              {% else %}
-                <form method="post" action="/favourite_location/{{ loc['id'] }}" style="display:inline;">
-                  <button class="btn-small btn-default" type="submit">Set as Default</button>
+          <label>New Password</label>
+          <input type="password" name="new_password" placeholder="Leave blank if not changing">
+
+          <button type="submit">Update Profile</button>
+        </form>
+      </div>
+
+      <!-- Saved Locations Section -->
+      <div class="section">
+        <h3>Saved Locations</h3>
+        <form method="post" action="/delete_locations" id="deleteForm" onsubmit="return validateDeleteSelection();">
+          <table>
+            <tr>
+              <th><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"></th>
+              <th>Label</th>
+              <th>Address</th>
+              <th>Postal Code</th>
+              <th>Default Location</th>
+              <th>Actions</th>
+            </tr>
+            {% for loc in locations %}
+            <tr>
+              <td>
+                {% if not loc['is_favourite'] %}
+                <input type="checkbox" name="delete_ids" value="{{ loc['id'] }}">
+                {% endif %}
+              </td>
+              <td>{{ loc['label'] }}</td>
+              <td>{{ loc['address'] if loc['address'] else 'N/A' }}</td>
+              <td>{{ loc['postal_code'] if loc['postal_code'] else 'N/A' }}</td>
+              <td>
+                {% if loc['is_favourite'] %}
+                  🌟 Default
+                {% else %}
+                  <form method="post" action="/favourite_location/{{ loc['id'] }}" style="display:inline;">
+                    <button class="btn-small btn-default" type="submit">Set as Default</button>
+                  </form>
+                {% endif %}
+              </td>
+              <td>
+                {% if not loc['is_favourite'] %}
+                <form method="post" action="/delete_location/{{ loc['id'] }}" style="display:inline;">
+                  <button class="btn-small btn-delete" type="submit">Delete</button>
                 </form>
-              {% endif %}
-            </td>
-            <td>
-              {% if not loc['is_favourite'] %}
-              <form method="post" action="/delete_location/{{ loc['id'] }}" style="display:inline;">
-                <button class="btn-small btn-delete" type="submit">Delete</button>
-              </form>
-              {% else %}
-              <span style="color:#888;">Protected</span>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </table>
+                {% else %}
+                <span style="color:#888;">Protected</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </table>
 
-        <button class="btn-delete" type="submit" style="margin-top:10px;">Delete Selected</button>
-      </form>
-    </div>
+          <button class="btn-delete" type="submit" style="margin-top:10px;">Delete Selected</button>
+        </form>
+      </div>
 
-    <!-- Add Location Section -->
-    <div class="section">
-      <h3>Add New Location</h3>
-      <form method="post" action="/add_location">
-        <label>Label</label>
-        <input type="text" name="label" placeholder="e.g. Home, Work" required>
+      <!-- Add Location Section -->
+      <div class="section">
+        <h3>Add New Location</h3>
+        <form method="post" action="/add_location">
+          <label>Label</label>
+          <input type="text" name="label" placeholder="e.g. Home, Work" required>
 
-        <label>Address or Postal Code</label>
-        <input type="text" id="address" placeholder="Enter Singapore address or postal code" required autocomplete="off">
+          <label>Address or Postal Code</label>
+          <input type="text" id="address" placeholder="Enter Singapore address or postal code" required autocomplete="off">
 
-        <input type="hidden" name="latitude" id="latitude">
-        <input type="hidden" name="longitude" id="longitude">
-        <input type="hidden" name="address" id="address_full">
-        <input type="hidden" name="postal_code" id="postal_code">
+          <input type="hidden" name="latitude" id="latitude">
+          <input type="hidden" name="longitude" id="longitude">
+          <input type="hidden" name="address" id="address_full">
+          <input type="hidden" name="postal_code" id="postal_code">
 
-        <div id="map"></div>
-        <button type="submit">Add Location</button>
-      </form>
+          <div id="map"></div>
+          <button type="submit">Add Location</button>
+        </form>
+      </div>
     </div>
   </div>
 
+  <!-- Load Google Maps with callback -->
   <script>
     // Toggle all checkboxes
     function toggleSelectAll(master) {
@@ -193,7 +212,7 @@
       return confirm("Are you sure you want to delete the selected location(s)?");
     }
 
-    // Google Map init
+    // Google Map initialization function
     let map, marker, geocoder, autocomplete;
     function initMap() {
       geocoder = new google.maps.Geocoder();
@@ -224,7 +243,14 @@
         document.getElementById("postal_code").value = postal;
       });
     }
-    window.onload = initMap;
+
+    // Make initMap available globally for Google Maps callback
+    window.initMap = initMap;
+  </script>
+
+  <!-- Load Google Maps API with callback at the end -->
+  <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDqQ73BXm5hIMOBJ1UBkDeLPs0Kkig2ffE&libraries=places&callback=initMap">
   </script>
 </body>
 </html>

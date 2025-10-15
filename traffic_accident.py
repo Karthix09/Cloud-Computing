@@ -6,9 +6,14 @@ import os
 import requests
 import pandas as pd
 import folium
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect, url_for, session
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, Table, Column, String, Float, MetaData, DateTime
+from database import init_users_db
+from auth import auth_bp, login_required, current_user
+
+#Initialize users database
+init_users_db()
 
 # --- Load from .env ---
 load_dotenv()
@@ -18,6 +23,26 @@ HEADERS = {"AccountKey": API_KEY, "accept": "application/json"}
 
 # --- Flask app ---
 app = Flask(__name__)
+
+app.secret_key = os.getenv("SECRET_KEY", "change-me")  # put a strong value in .env later
+app.register_blueprint(auth_bp)
+
+# ---------------- LOGIN REQUIRED DECORATOR ----------------
+@app.before_request
+def require_login():
+    # 1️⃣ pages that should NOT require login
+    open_paths = ("/login", "/register", "/logout", "/static/", "/favicon.ico")
+    
+    # 2️⃣ Allow all public pages through
+    # If the path starts with any of the open paths above, skip login check
+    if request.path.startswith(open_paths):
+        return
+
+    # 3️⃣ For all other routes, check if user is logged in
+    if not session.get("user_id"):
+        # User not logged in → redirect to /login
+        return redirect(url_for("auth.login"))
+        
 
 # --- Global state ---
 last_update = ""

@@ -1,9 +1,15 @@
 import os, sqlite3, requests, threading, time
 from datetime import datetime
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, redirect, url_for, session
 from dotenv import load_dotenv
+from database import init_users_db
+from auth import auth_bp, login_required, current_user 
 
-# Shows bus Dashboard plus the history 
+
+
+init_users_db()  # creates users & locations tables if missing
+
+
 
 # ---------------- CONFIG ----------------
 load_dotenv()
@@ -17,6 +23,26 @@ DB_FILE = os.path.join(BASE_DIR, "database/bus_data.db")
 
 app = Flask(__name__)
 
+app.secret_key = os.getenv("SECRET_KEY", "change-me")  # put a strong value in .env later
+app.register_blueprint(auth_bp)
+
+    
+# ---------------- LOGIN REQUIRED DECORATOR ----------------
+@app.before_request
+def require_login():
+    # 1️⃣ pages that should NOT require login
+    open_paths = ("/login", "/register", "/logout", "/static/", "/favicon.ico")
+    
+    # 2️⃣ Allow all public pages through
+    # If the path starts with any of the open paths above, skip login check
+    if request.path.startswith(open_paths):
+        return
+
+    # 3️⃣ For all other routes, check if user is logged in
+    if not session.get("user_id"):
+        # User not logged in → redirect to /login
+        return redirect(url_for("auth.login"))
+    
 # ---------------- DB SETUP ----------------
 def init_db():
     conn = sqlite3.connect(DB_FILE)
