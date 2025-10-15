@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>📊 Nationwide Delay Trends</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body { font-family: Arial; text-align:center; margin:20px; }
+canvas { max-width: 90%; height: 400px; margin:auto; }
+a { text-decoration:none; color:#007bff; }
+</style>
+</head>
+<body>
+<h2>📊 Nationwide Bus Delay Trends (Last 24 Hours)</h2>
+<p>Average ETA across all bus stops by hour.</p>
+<canvas id="chart"></canvas>
+<br><a href="/">⬅ Back</a>
+
+<script>
+const chartData = JSON.parse(`{{ data | tojson | safe }}`);
+
+function renderChart(){
+ new Chart(document.getElementById('chart'), {
+  type: 'line',
+  data: { datasets: [{ label: "Nationwide Avg ETA (min)", data: chartData, borderColor: "hsl(210,70%,50%)", fill:false, tension:0.3 }] },
+  options: {
+    scales: {
+      x: { type:'linear', title:{display:true,text:'Hour (0–23)'}, ticks:{stepSize:1} },
+      y: { title:{display:true,text:'Average ETA (min)'}, min:0 }
+    },
+    plugins: { legend:{position:'bottom'}, title:{display:true,text:'Average Nationwide Delay Trend'} }
+  }
+ });
+}
+renderChart();
+setInterval(()=>location.reload(),300000); // auto-refresh every 5 min
+</script>
+</body>
+</html>
+
+
+
+
+
+

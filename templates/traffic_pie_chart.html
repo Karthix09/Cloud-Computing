@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Interactive Traffic Pie Chart</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background-color: #f4f6f9;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      color: #0078d7;
+    }
+    .chart-box {
+      display: flex;
+      justify-content: center;
+    }
+    .back {
+      display: inline-block;
+      margin-top: 20px;
+      background: #0078d7;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>Current Traffic Incidents by Type</h1>
+
+  {% if chart_html %}
+    <div class="chart-box">
+      {{ chart_html | safe }}
+    </div>
+  {% else %}
+    <p><b>No data available to generate chart.</b></p>
+  {% endif %}
+
+  <p>🕒 Last updated: {{ last_update }}</p>
+  <a href="/" class="back">⬅ Back to Dashboard</a>
+</body>
+</html>

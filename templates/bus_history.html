@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>🧠 Bus Delay Insights – Stop {{ stop_code }}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+<style>
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: linear-gradient(180deg,#f7faff,#e7eff8);
+  color: #333;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+}
+header {
+  background: linear-gradient(90deg,#0078d7,#00a6ff);
+  color: white;
+  padding: 15px 0;
+  font-size: 1.5em;
+  font-weight: 600;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+}
+.container {
+  width: 90%;
+  margin: 25px auto;
+  background: rgba(255,255,255,0.98);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+h2 { color: #0078d7; margin-bottom: 8px; }
+h3 { color: #666; font-weight: 500; margin-top: 0; }
+
+#gaugeWrapper {
+  width: 250px;
+  margin: 20px auto;
+}
+
+.recommend-box {
+  background: #eef6ff;
+  border-left: 6px solid #0078d7;
+  border-radius: 10px;
+  padding: 14px 20px;
+  text-align: left;
+  margin-top: 20px;
+  line-height: 1.5;
+  font-size: 15px;
+  color: #444;
+}
+.recommend-box strong { color: #0078d7; }
+button {
+  margin-top: 25px;
+  background: #0078d7;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 15px;
+  cursor: pointer;
+}
+button:hover { background: #005fa3; }
+
+canvas { margin-top: 25px; }
+</style>
+</head>
+
+<body>
+<header>🧠 Bus Delay Insights – Stop {{ stop_code }}</header>
+
+<div class="container">
+  <h2>Average Delay Overview (Past 24 h)</h2>
+  <h3>Quick glance at bus performance by hour</h3>
+  
+  <div id="gaugeWrapper">
+    <canvas id="delayGauge"></canvas>
+  </div>
+
+  <canvas id="heatMapChart" height="250"></canvas>
+
+  <div class="recommend-box" id="recommendations">
+    <strong>🧭 Travel Recommendations:</strong>
+    <ul id="recList"><li>Loading insights...</li></ul>
+  </div>
+
+  <button onclick="window.location.href='/'">← Back to Map</button>
+</div>
+
+<script>
+// -------- Incoming data --------
+const chartData = {{ data | tojson | safe }};
+const allValues = Object.values(chartData).flatMap(s => s.map(p => p.y || 0));
+const avgDelay = allValues.length ? allValues.reduce((a,b)=>a+b,0)/allValues.length : 0;
+
+// --------- Gauge (easy to read) ----------
+const gaugeCtx = document.getElementById("delayGauge");
+new Chart(gaugeCtx, {
+  type: 'doughnut',
+  data: {
+    labels: ['Delay', 'On Time'],
+    datasets: [{
+      data: [avgDelay, Math.max(0, 30-avgDelay)],
+      backgroundColor: ['#ff6b6b', '#b2f2bb'],
+      borderWidth: 0
+    }]
+  },
+  options: {
+    plugins: {
+      title: {
+        display: true,
+        text: `Avg Delay: ${avgDelay.toFixed(1)} min`,
+        font: { size: 16, weight: 'bold' }
+      },
+      legend: { display: false }
+    },
+    cutout: '70%'
+  }
+});
+
+// --------- Heat Map by Hour ----------
+const hours = Array.from({length:24},(_,i)=>i);
+const services = Object.keys(chartData);
+const datasets = services.map((svc,i)=>({
+  label: "Svc " + svc,
+  data: chartData[svc].map(p=>p.y),
+  backgroundColor: `hsla(${i*50},80%,60%,0.7)`
+}));
+
+const ctx = document.getElementById("heatMapChart").getContext("2d");
+new Chart(ctx, {
+  type: "bar",
+  data: { labels: hours, datasets },
+  options: {
+    responsive: true,
+    plugins: {
+      title: {
+        display: true,
+        text: "Hourly Delay Distribution",
+        font: { size: 16, weight: "bold" }
+      },
+      legend: { position: "bottom" },
+      tooltip: {
+        callbacks: {
+          label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} min`
+        }
+      }
+    },
+    scales: {
+      x: {
+        title: { display: true, text: "Hour of Day (0–23)", color: "#0078d7" }
+      },
+      y: {
+        title: { display: true, text: "Avg ETA (min)", color: "#0078d7" },
+        beginAtZero: true
+      }
+    }
+  }
+});
+
+// ---------- Smart Travel Insights ----------
+const recList = document.getElementById("recList");
+recList.innerHTML = "";
+if (avgDelay < 10)
+  recList.innerHTML += "<li>✅ Buses are mostly <strong>on schedule</strong>.</li>";
+else if (avgDelay < 20)
+  recList.innerHTML += "<li>🕒 Minor delays expected — plan 5 min earlier.</li>";
+else
+  recList.innerHTML += "<li>⚠️ Heavy congestion likely — check alternatives.</li>";
+
+const hr = new Date().getHours();
+if (hr >= 7 && hr <= 9)
+  recList.innerHTML += "<li>🌅 Morning peak — expect higher passenger volume.</li>";
+else if (hr >= 17 && hr <= 20)
+  recList.innerHTML += "<li>🌇 Evening rush — buses may be crowded.</li>";
+else
+  recList.innerHTML += "<li>🌙 Off-peak hours — smoother rides, faster trips.</li>";
+
+const m = new Date().getMonth()+1;
+if ([11,12,1].includes(m))
+  recList.innerHTML += "<li>🎄 Holiday period — family and tourist traffic may increase waits.</li>";
+if ([5,6].includes(m))
+  recList.innerHTML += "<li>🏖️ School holidays — expect mid-day surges.</li>";
+</script>
+</body>
+</html>

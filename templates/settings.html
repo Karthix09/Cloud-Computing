@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>User Settings</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDqQ73BXm5hIMOBJ1UBkDeLPs0Kkig2ffE&libraries=places"></script>
+  <style>
+    .section {
+      margin-top: 30px;
+      padding: 20px;
+      border-radius: 12px;
+      background: #fdfdfd;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
+    }
+    .section h3 {
+      margin-top: 0;
+      font-size: 20px;
+      color: #2d4a9d;
+      border-bottom: 2px solid #dfe4f5;
+      padding-bottom: 6px;
+      margin-bottom: 15px;
+    }
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .logout-btn {
+      background: #dc3545;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .logout-btn:hover {
+      background: #b52a36;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    table th, table td {
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+      padding: 8px;
+    }
+    table tr:hover { background-color: #f9f9f9; }
+    .btn-small {
+      padding: 4px 8px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .btn-default {
+      background: #007bff;
+      color: white;
+    }
+    .btn-delete {
+      background: #dc3545;
+      color: white;
+    }
+    .btn-delete:hover {
+      background: #b52a36;
+    }
+    #map {
+      height: 300px;
+      width: 100%;
+      margin-top: 10px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="top-bar">
+      <h2>User Settings ⚙️</h2>
+      <form action="/logout" method="get" style="margin:0;">
+        <button class="logout-btn" type="submit">Logout</button>
+      </form>
+    </div>
+    <p>Welcome, <strong>{{ user['username'] }}</strong></p>
+
+    <!-- Profile Section -->
+    <div class="section">
+      <h3>Profile Information</h3>
+      <p><strong>Date of Birth:</strong> {{ user['date_of_birth'] }}</p>
+
+      <form method="post" action="/update_profile">
+        <label>Current Password (Required To Update)</label>
+        <input type="password" name="current_password" placeholder="Enter current password" required>
+
+        <label>Email</label>
+        <input type="email" name="email" value="{{ user['email'] }}">
+
+        <label>Phone Number</label>
+        <input type="text" name="phone" value="{{ user['phone'] }}">
+
+        <label>New Password</label>
+        <input type="password" name="new_password" placeholder="Leave blank if not changing">
+
+        <button type="submit">Update Profile</button>
+      </form>
+    </div>
+
+    <!-- Saved Locations Section -->
+    <div class="section">
+      <h3>Saved Locations</h3>
+      <form method="post" action="/delete_locations" id="deleteForm" onsubmit="return validateDeleteSelection();">
+        <table>
+          <tr>
+            <th><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"></th>
+            <th>Label</th>
+            <th>Address</th>
+            <th>Postal Code</th>
+            <th>Default Location</th>
+            <th>Actions</th>
+          </tr>
+          {% for loc in locations %}
+          <tr>
+            <td>
+              {% if not loc['is_favourite'] %}
+              <input type="checkbox" name="delete_ids" value="{{ loc['id'] }}">
+              {% endif %}
+            </td>
+            <td>{{ loc['label'] }}</td>
+            <td>{{ loc['address'] if loc['address'] else 'N/A' }}</td>
+            <td>{{ loc['postal_code'] if loc['postal_code'] else 'N/A' }}</td>
+            <td>
+              {% if loc['is_favourite'] %}
+                🌟 Default
+              {% else %}
+                <form method="post" action="/favourite_location/{{ loc['id'] }}" style="display:inline;">
+                  <button class="btn-small btn-default" type="submit">Set as Default</button>
+                </form>
+              {% endif %}
+            </td>
+            <td>
+              {% if not loc['is_favourite'] %}
+              <form method="post" action="/delete_location/{{ loc['id'] }}" style="display:inline;">
+                <button class="btn-small btn-delete" type="submit">Delete</button>
+              </form>
+              {% else %}
+              <span style="color:#888;">Protected</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </table>
+
+        <button class="btn-delete" type="submit" style="margin-top:10px;">Delete Selected</button>
+      </form>
+    </div>
+
+    <!-- Add Location Section -->
+    <div class="section">
+      <h3>Add New Location</h3>
+      <form method="post" action="/add_location">
+        <label>Label</label>
+        <input type="text" name="label" placeholder="e.g. Home, Work" required>
+
+        <label>Address or Postal Code</label>
+        <input type="text" id="address" placeholder="Enter Singapore address or postal code" required autocomplete="off">
+
+        <input type="hidden" name="latitude" id="latitude">
+        <input type="hidden" name="longitude" id="longitude">
+        <input type="hidden" name="address" id="address_full">
+        <input type="hidden" name="postal_code" id="postal_code">
+
+        <div id="map"></div>
+        <button type="submit">Add Location</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // Toggle all checkboxes
+    function toggleSelectAll(master) {
+      const checkboxes = document.querySelectorAll('input[name="delete_ids"]');
+      checkboxes.forEach(cb => cb.checked = master.checked);
+    }
+
+    // Validate delete selection
+    function validateDeleteSelection() {
+      const selected = document.querySelectorAll('input[name="delete_ids"]:checked');
+      if (selected.length === 0) {
+        alert("Please select the location(s) to be deleted.\n\nNote: You cannot delete your default location.");
+        return false;
+      }
+      return confirm("Are you sure you want to delete the selected location(s)?");
+    }
+
+    // Google Map init
+    let map, marker, geocoder, autocomplete;
+    function initMap() {
+      geocoder = new google.maps.Geocoder();
+      const sg = { lat: 1.3521, lng: 103.8198 };
+      map = new google.maps.Map(document.getElementById("map"), { zoom: 11, center: sg });
+      marker = new google.maps.Marker({ map: map, position: sg });
+
+      autocomplete = new google.maps.places.Autocomplete(
+        document.getElementById("address"),
+        { componentRestrictions: { country: "sg" }, fields: ["formatted_address", "geometry", "address_components"] }
+      );
+
+      autocomplete.addListener("place_changed", () => {
+        const place = autocomplete.getPlace();
+        if (!place.geometry) return;
+        const location = place.geometry.location;
+        map.setCenter(location);
+        map.setZoom(15);
+        marker.setPosition(location);
+        document.getElementById("latitude").value = location.lat();
+        document.getElementById("longitude").value = location.lng();
+        document.getElementById("address_full").value = place.formatted_address;
+
+        let postal = "";
+        for (const comp of place.address_components) {
+          if (comp.types.includes("postal_code")) postal = comp.long_name;
+        }
+        document.getElementById("postal_code").value = postal;
+      });
+    }
+    window.onload = initMap;
+  </script>
+</body>
+</html>

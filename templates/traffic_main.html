@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>🚦 Singapore Traffic Dashboard</title>
+  <meta http-equiv="refresh" content="60">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    header {
+      background: #0078d7;
+      color: white;
+      text-align: center;
+      padding: 14px;
+      font-size: 1.6em;
+      font-weight: bold;
+    }
+
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .dashboard-panel {
+      width: 340px;
+      background-color: #f4f6f9;
+      padding: 20px;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+      overflow-y: auto;
+    }
+
+    .map-container {
+      flex: 1;
+      position: relative;
+    }
+
+    form {
+      margin: 10px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    input,
+    select,
+    button {
+      padding: 6px;
+      font-size: 1em;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 10px;
+    }
+
+    th,
+    td {
+      padding: 6px;
+      text-align: left;
+      border-bottom: 1px solid #ccc;
+    }
+
+    th {
+      background-color: #0078d7;
+      color: white;
+    }
+  </style>
+</head>
+
+<body>
+  <script type="module">
+    import { createSidebar } from "/static/navbar.js"; 
+    createSidebar("traffic"); // or "traffic"
+  </script>
+
+<div class="content">
+  <header>🚦 Traffic Dashboard</header>
+
+  <main>
+    <div class="dashboard-panel">
+      <p style="text-align:center; margin-bottom:10px;">
+        <a href="/traffic_pie_chart" style="background:#0078d7;color:white;padding:8px 14px;
+            border-radius:6px;text-decoration:none;font-weight:bold;
+            display:inline-block;">
+          📊 View Traffic Pie Chart
+        </a>
+      </p>
+
+
+      <form method="POST">
+        <input type="text" name="search" placeholder="Search road or area..." value="{{ search_query }}">
+        <select name="road">
+          <option value="">All Roads</option>
+          {% for r in road_options %}
+          <option value="{{ r }}" {% if road_query==r %}selected{% endif %}>{{ r }}</option>
+          {% endfor %}
+        </select>
+        <select name="type">
+          <option value="">All Types</option>
+          {% for t in type_options %}
+          <option value="{{ t }}" {% if type_query==t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+        <div style="display:flex; gap:6px;">
+          <input type="submit" value="Filter" style="flex:1;">
+          <button type="submit" name="clear" value="1" style="flex:1;">Clear</button>
+        </div>
+      </form>
+
+      <p><b>Last updated:</b> {{ last_update }}</p>
+
+      <table>
+        <tr>
+          <th colspan="2">Dashboard Summary</th>
+        </tr>
+        <tr>
+          <td><b>Total incidents:</b></td>
+          <td>{{ total_incidents }}</td>
+        </tr>
+        <tr>
+          <td><b>Most common road:</b></td>
+          <td>{{ most_road }}</td>
+        </tr>
+        <tr>
+          <td><b>Most common type:</b></td>
+          <td>{{ most_type }}</td>
+        </tr>
+      </table>
+
+      {% if type_counts %}
+      <table>
+        <tr>
+          <th colspan="2">Breakdown by Type</th>
+        </tr>
+        {% for t, count in type_counts.items() %}
+        <tr>
+          <td>{{ t }}</td>
+          <td>{{ count }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+
+      {% if no_results %}
+      <p style="color:red;"><b>No incidents found. Try different filters.</b></p>
+      {% endif %}
+    </div>
+
+    <div class="map-container">
+      {{ filtered_html|safe }}
+    </div>
+  </main>
+ </div>
+</body>
+
+</html>
