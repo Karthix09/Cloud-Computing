@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import pandas as pd
 import folium
 from sqlalchemy import create_engine, Table, Column, String, Float, MetaData, DateTime
+from chatbot_app import chatbot_bp
 
 # Import auth module
 from database import init_users_db
@@ -32,15 +33,16 @@ BUS_DB_FILE = os.path.join(BASE_DIR, "database/bus_data.db")
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "change-me-to-strong-secret")
 app.register_blueprint(auth_bp)
+app.register_blueprint(chatbot_bp)
 
 # ==================== LOGIN REQUIRED ====================
-@app.before_request
-def require_login():
-    open_paths = ("/login", "/register", "/logout", "/static/", "/favicon.ico")
-    if request.path.startswith(open_paths):
-        return
-    if not session.get("user_id"):
-        return redirect(url_for("auth.login"))
+# @app.before_request
+# def require_login():
+#     open_paths = ("/login", "/register", "/logout", "/static/", "/favicon.ico")
+#     if request.path.startswith(open_paths):
+#         return
+#     if not session.get("user_id"):
+#         return redirect(url_for("auth.login"))
 
 # ==================== BUS MODULE ====================
 
