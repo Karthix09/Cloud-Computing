@@ -175,12 +175,12 @@ export function createSidebar(current) {
     <nav class="app-sidebar" id="appSidebar">
       <h2>🚀 Transport Analytics</h2>
       
-      <a href="http://127.0.0.1:5000/" class="${current === 'bus' ? 'active' : ''}">
+          <a href="/bus" class="${current === 'bus' ? 'active' : ''}">
         <span>🚌</span>
         <span>Bus Dashboard</span>
       </a>
-      
-      <a href="http://127.0.0.1:5001/" class="${current === 'traffic' ? 'active' : ''}">
+
+      <a href="/traffic" class="${current === 'traffic' ? 'active' : ''}">
         <span>🚧</span>
         <span>Traffic Dashboard</span>
       </a>

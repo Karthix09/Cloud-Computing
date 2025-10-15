@@ -48,7 +48,7 @@ def login():
         return render_template("login.html"), 401
     session["user_id"] = row["id"]
     session["username"] = row["username"]
-    return redirect(url_for("auth.settings"))
+    return redirect("/traffic")
 
 
 @auth_bp.route("/logout")
