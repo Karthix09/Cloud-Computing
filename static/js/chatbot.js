@@ -66,7 +66,7 @@ async function sendMessage(predefinedMessage = null) {
     } catch (error) {
         console.error('Error:', error);
         removeTypingIndicator();
-        addMessage('âŒ Sorry, something went wrong. Please try again.', 'bot');
+        addMessage('❌ Sorry, something went wrong. Please try again.', 'bot');
     }
     
     // Refocus input
@@ -121,7 +121,7 @@ function addMessage(text, sender) {
     
     const avatar = document.createElement('div');
     avatar.className = 'message-avatar';
-    avatar.textContent = sender === 'user' ? 'ðŸ‘¤' : 'ðŸ¤–';
+    avatar.textContent = sender === 'user' ? '👤' : '🤖';
     
     const content = document.createElement('div');
     content.className = 'message-content';
@@ -157,7 +157,7 @@ function addBusStopOptions(stops) {
     
     const avatar = document.createElement('div');
     avatar.className = 'message-avatar';
-    avatar.textContent = 'ðŸ¤–';
+    avatar.textContent = '🤖';
     
     const content = document.createElement('div');
     content.className = 'message-content';
@@ -170,7 +170,7 @@ function addBusStopOptions(stops) {
         button.className = 'bus-stop-btn';
         button.innerHTML = `
             <strong>${stop.description}</strong>
-            <small>ðŸ“ ${stop.road} â€¢ Code: ${stop.code}</small>
+            <small>📍 ${stop.road} • Code: ${stop.code}</small>
         `;
         button.onclick = () => selectBusStop(stop.code);
         optionsDiv.appendChild(button);
@@ -203,7 +203,7 @@ function showTypingIndicator() {
     
     const avatar = document.createElement('div');
     avatar.className = 'message-avatar';
-    avatar.textContent = 'ðŸ¤–';
+    avatar.textContent = '🤖';
     
     const content = document.createElement('div');
     content.className = 'message-content';
@@ -265,7 +265,7 @@ async function searchBusStops(query) {
 
 function requestUserLocation() {
     if (!navigator.geolocation) {
-        addMessage('âŒ Geolocation is not supported by your browser.', 'bot');
+        addMessage('❌ Geolocation is not supported by your browser.', 'bot');
         return;
     }
     
@@ -296,9 +296,9 @@ function requestUserLocation() {
                 removeTypingIndicator();
                 
                 if (nearbyStops.length === 0) {
-                    addMessage('âŒ No bus stops found nearby.', 'bot');
+                    addMessage('❌ No bus stops found nearby.', 'bot');
                 } else {
-                    addMessage(`ðŸ“ Found ${nearbyStops.length} bus stops near you:`, 'bot');
+                    addMessage(`📍 Found ${nearbyStops.length} bus stops near you:`, 'bot');
                     
                     // Format stops with distance
                     const stopsWithDistance = nearbyStops.map(stop => ({
@@ -312,13 +312,13 @@ function requestUserLocation() {
             } catch (error) {
                 console.error('Error fetching nearby stops:', error);
                 removeTypingIndicator();
-                addMessage('âŒ Sorry, I couldn\'t fetch nearby bus stops.', 'bot');
+                addMessage('❌ Sorry, I couldn\'t fetch nearby bus stops.', 'bot');
             }
         },
         // Error callback
         (error) => {
             removeTypingIndicator();
-            let errorMessage = 'âŒ ';
+            let errorMessage = '❌ ';
             
             switch(error.code) {
                 case error.PERMISSION_DENIED:
