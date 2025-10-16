@@ -11,6 +11,7 @@ def init_users_db():
     conn = get_db_connection()
     c = conn.cursor()
 
+    # Creating the users table 
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE,
@@ -21,6 +22,7 @@ def init_users_db():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
 
+    # Table for storing user locations 
     c.execute('''CREATE TABLE IF NOT EXISTS locations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
@@ -28,6 +30,9 @@ def init_users_db():
         latitude REAL,
         longitude REAL,
         is_primary BOOLEAN DEFAULT 0,
+        address TEXT,
+        postal_code TEXT,
+        is_favourite BOOLEAN DEFAULT 0,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )''')
 

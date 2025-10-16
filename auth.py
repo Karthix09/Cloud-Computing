@@ -10,6 +10,7 @@ auth_bp = Blueprint("auth", __name__, template_folder="templates", static_folder
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 USERS_DB = os.path.join(BASE_DIR, "users.db")
 
+# Connect to Users DB
 def get_db():
     conn = sqlite3.connect(USERS_DB)
     conn.row_factory = sqlite3.Row

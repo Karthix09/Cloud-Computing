@@ -6,9 +6,14 @@ import pandas as pd
 import folium
 from sqlalchemy import create_engine, Table, Column, String, Float, MetaData, DateTime
 
+
+
 # Import auth module
 from database import init_users_db
 from auth import auth_bp, login_required, current_user, USERS_DB
+
+#Chatbot module
+from chatbot import chatbot_bp 
 
 
 # Initialize users database
@@ -16,6 +21,8 @@ init_users_db()
 
 # Load environment variables
 load_dotenv()
+
+
 
 # ==================== CONFIGURATION ====================
 API_KEY = os.getenv("API_KEY")
@@ -33,6 +40,9 @@ BUS_DB_FILE = os.path.join(BASE_DIR, "database/bus_data.db")
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "change-me-to-strong-secret")
 app.register_blueprint(auth_bp)
+
+# ==================== CHATBOT blueprint ====================
+app.register_blueprint(chatbot_bp)
 
 # ==================== LOGIN REQUIRED ====================
 @app.before_request

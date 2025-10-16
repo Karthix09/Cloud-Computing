@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 Transport Buddy Chatbot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chatbot.css') }}">
+</head>
+<body>
+    <!-- Add Navbar -->
+    <script type="module">
+        import { createSidebar } from "/static/navbar.js"; 
+        createSidebar("chatbot");
+    </script>
+
+    <div class="content">
+        <div class="chat-container">
+            <!-- Header -->
+            <div class="chat-header">
+                <div class="header-content">
+                    <div class="bot-avatar">🤖</div>
+                    <div class="header-text">
+                        <h1>Transport Buddy</h1>
+                        <p class="status">● Online</p>
+                    </div>
+                </div>
+                <button class="help-btn" onclick="sendMessage('help')">❓ Help</button>
+            </div>
+
+            <!-- Messages Area -->
+            <div class="chat-messages" id="chatMessages">
+                <!-- Welcome message -->
+                <div class="message bot-message">
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-content">
+                        <p>👋 Hello! I'm your Transport Buddy!</p>
+                        <p>I can help you check bus arrival times in Singapore.</p>
+                        <p>Try asking: <strong>"Bus at Raffles Place"</strong> or <strong>"Next bus at Orchard Road"</strong></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions" id="quickActions">
+                <button onclick="sendQuickMessage('bus stops near me')" class="quick-btn">
+                    📍 Find Nearby Stops
+                </button>
+            </div>
+
+            <!-- Input Area -->
+            <div class="chat-input-container">
+                <input 
+                    type="text" 
+                    id="userInput" 
+                    class="chat-input" 
+                    placeholder="Ask about bus arrivals..."
+                    autocomplete="off"
+                >
+                <button class="send-btn" onclick="sendMessage()">
+                    <span class="send-icon">➤</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/chatbot.js') }}"></script>
+</body>
+</html>

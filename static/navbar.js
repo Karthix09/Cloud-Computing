@@ -184,6 +184,11 @@ export function createSidebar(current) {
         <span>🚧</span>
         <span>Traffic Dashboard</span>
       </a>
+
+     <a href="/chatbot" class="${current === 'chatbot' ? 'active' : ''}">
+    <span>🤖</span>
+    <span>AI Assistant</span>
+     </a>
       
       <a href="/settings" class="${current === 'settings' ? 'active' : ''}">
         <span>⚙️</span>
@@ -194,6 +199,7 @@ export function createSidebar(current) {
         <span>🚪</span>
         <span>Logout</span>
       </a>
+
 
       <div class="sidebar-footer">
         Transport Analytics Hub<br>
