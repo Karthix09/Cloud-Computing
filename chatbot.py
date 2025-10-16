@@ -224,18 +224,18 @@ def process_message(message, session_data=None):
     # Greeting
     if any(word in message_lower for word in ['hello', 'hi', 'hey', 'start']):
         return {
-            'response': "ðŸ‘‹ Hello! I'm your Transport Buddy!\n\n"
+            'response': "👋 Hello! I'm your Transport Buddy!\n\n"
                        "I can help you with:\n"
-                       "â€¢ ðŸšŒ Bus arrival times\n"
-                       "â€¢ ðŸ” Finding bus stops\n"
-                       "â€¢ ðŸ“ Bus stops near you\n\n",
+                       "• 🚌 Bus arrival times\n"
+                       "• 🔍 Finding bus stops\n"
+                       "• 📍 Bus stops near you\n\n",
             'type': 'greeting'
         }
     
     # Location-based query
     if any(phrase in message_lower for phrase in ['near me', 'nearby', 'closest', 'nearest', 'my location']):
         return {
-            'response': "ðŸ“ I'll find bus stops near you!\n\n"
+            'response': "📍 I'll find bus stops near you!\n\n"
                        "Please allow location access when prompted by your browser.",
             'type': 'request_location',
             'action': 'get_nearby_stops'
@@ -261,27 +261,27 @@ def process_message(message, session_data=None):
     # Help
     if 'help' in message_lower:
         return {
-            'response': "ðŸ¤– Here's what I can do:\n\n"
-                       "ðŸšŒ **Check Bus Arrivals:**\n"
-                       "â€¢ 'Bus at [stop name]'\n"
-                       "â€¢ 'When is bus 75 at [stop name] coming?'\n\n"
-                       "ðŸ“ **Find Nearby Stops:**\n"
-                       "â€¢ 'Bus stops near me'\n"
-                       "ðŸ’¬ **Follow-up Questions:**\n"
-                       "â€¢ After checking a stop, ask 'What about bus 167?'\n\n"
-                       "ðŸ’¡ **Tips:**\n"
-                       "â€¢ You can search by bus stop name or road\n"
-                       "â€¢ I remember your last searched stop for follow-ups",
+            'response': "🤖 Here's what I can do:\n\n"
+                       "🚌 **Check Bus Arrivals:**\n"
+                       "• 'Bus at [stop name]'\n"
+                       "• 'When is bus 75 at [stop name] coming?'\n\n"
+                       "📍 **Find Nearby Stops:**\n"
+                       "• 'Bus stops near me'\n"
+                       "💬 **Follow-up Questions:**\n"
+                       "• After checking a stop, ask 'What about bus 167?'\n\n"
+                       "💡 **Tips:**\n"
+                       "• You can search by bus stop name or road\n"
+                       "• I remember your last searched stop for follow-ups",
             'type': 'help'
         }
     
     # Default response
     return {
-        'response': "ðŸ¤” I'm not sure how to help with that.\n\n"
+        'response': "🤔 I'm not sure how to help with that.\n\n"
                    "Try asking:\n"
-                   "â€¢ 'Bus stops near me'\n"
-                   "â€¢ 'Bus at [location name]'\n"
-                   "â€¢ Type 'help' for more options",
+                   "• 'Bus stops near me'\n"
+                   "• 'Bus at [location name]'\n"
+                   "• Type 'help' for more options",
         'type': 'unknown'
     }
 
@@ -325,11 +325,11 @@ def handle_bus_query(message):
     
     if not location:
         return {
-            'response': "ðŸ¤” I couldn't find a location in your message.\n\n"
+            'response': "🤔 I couldn't find a location in your message.\n\n"
                        "Try asking like this:\n"
-                       "â€¢ 'Bus at Raffles Place'\n"
-                       "â€¢ 'Next bus at Orchard Road'\n"
-                       "â€¢ 'Bus timing at stop 01012'",
+                       "• 'Bus at Raffles Place'\n"
+                       "• 'Next bus at Orchard Road'\n"
+                       "• 'Bus timing at stop 01012'",
             'type': 'clarification',
             'needs_location': True
         }
@@ -397,12 +397,12 @@ def search_and_present_stops(location):
     
     if not results:
         return {
-            'response': f"âŒ Sorry, I couldn't find any bus stops matching '{location}'.\n\n"
-                       "ðŸ’¡ Try:\n"
-                       "â€¢ Using the full road name (e.g., 'Orchard Road')\n"
-                       "â€¢ Using the bus stop code if you know it\n"
-                       "â€¢ Being more specific (e.g., 'Raffles Quay' or 'Raffles Hotel')\n"
-                       "â€¢ Searching for just one word (e.g., 'Raffles')",
+            'response': f"❌ Sorry, I couldn't find any bus stops matching '{location}'.\n\n"
+                       "💡 Try:\n"
+                       "• Using the full road name (e.g., 'Orchard Road')\n"
+                       "• Using the bus stop code if you know it\n"
+                       "• Being more specific (e.g., 'Raffles Quay' or 'Raffles Hotel')\n"
+                       "• Searching for just one word (e.g., 'Raffles')",
             'type': 'not_found'
         }
     
@@ -416,7 +416,7 @@ def search_and_present_stops(location):
     results = results[:10]
     
     return {
-        'response': f"ðŸ” I found {len(results)} bus stops matching '{location}':\n\n"
+        'response': f"🔍 I found {len(results)} bus stops matching '{location}':\n\n"
                    "Please choose one by clicking below:",
         'type': 'multiple_matches',
         'stops': [
@@ -440,7 +440,7 @@ def get_bus_arrivals(bus_stop_code):
     if not stop_info:
         conn.close()
         return {
-            'response': f"âŒ Bus stop {bus_stop_code} not found in database.",
+            'response': f"❌ Bus stop {bus_stop_code} not found in database.",
             'type': 'error'
         }
     
@@ -456,9 +456,9 @@ def get_bus_arrivals(bus_stop_code):
     if not latest_time_result:
         conn.close()
         return {
-            'response': f"ðŸš **{stop_name}** ({bus_stop_code})\n"
-                       f"ðŸ“ {road}\n\n"
-                       f"âŒ No bus arrival data available at the moment.",
+            'response': f"🚏 **{stop_name}** ({bus_stop_code})\n"
+                       f"📍 {road}\n\n"
+                       f"❌ No bus arrival data available at the moment.",
             'type': 'no_data',
             'stop_code': bus_stop_code,
             'stop_name': stop_name
@@ -488,9 +488,9 @@ def get_bus_arrivals(bus_stop_code):
     
     if not arrivals_raw:
         return {
-            'response': f"ðŸš **{stop_name}** ({bus_stop_code})\n"
-                       f"ðŸ“ {road}\n\n"
-                       f"âŒ No buses currently arriving.",
+            'response': f"🚏 **{stop_name}** ({bus_stop_code})\n"
+                       f"📍 {road}\n\n"
+                       f"❌ No buses currently arriving.",
             'type': 'no_arrivals',
             'stop_code': bus_stop_code,
             'stop_name': stop_name
@@ -505,13 +505,13 @@ def get_bus_arrivals(bus_stop_code):
         bus_type_upper = bus_type.upper()
         
         if bus_type_upper == 'SD':
-            return "ðŸšŒ Single Decker"
+            return "🚌 Single Decker"
         elif bus_type_upper == 'DD':
-            return "ðŸš Double Decker"
+            return "🚍 Double Decker"
         elif bus_type_upper == 'BD':
-            return "ðŸš Bendy Bus"
+            return "🚐 Bendy Bus"
         else:
-            return f"ðŸšŒ {bus_type}"
+            return f"🚌 {bus_type}"
     
     # Group by service number (take most recent record for each service)
     arrivals_dict = {}
@@ -526,9 +526,9 @@ def get_bus_arrivals(bus_stop_code):
         arrivals_dict[service]['eta'].append(eta)
     
     # Format response
-    response_text = f"ðŸš **{stop_name}** ({bus_stop_code})\n"
-    response_text += f"ðŸ“ {road}\n\n"
-    response_text += "ðŸšŒ **Bus Arrivals:**\n\n"
+    response_text = f"🚏 **{stop_name}** ({bus_stop_code})\n"
+    response_text += f"📍 {road}\n\n"
+    response_text += "🚌 **Bus Arrivals:**\n\n"
     
     for service_data in sorted(arrivals_dict.values(), key=lambda x: x['service']):
         service = service_data['service']
@@ -545,12 +545,12 @@ def get_bus_arrivals(bus_stop_code):
             else:
                 formatted_etas.append(f"{int(eta)} min")
         
-        eta_text = " â€¢ ".join(formatted_etas)
+        eta_text = " • ".join(formatted_etas)
         bus_type_text = format_bus_type(bus_type)
         
         # Display bus with type
         response_text += f"**Bus {service}** - {bus_type_text}\n"
-        response_text += f"â±ï¸ {eta_text}\n\n"
+        response_text += f"⏱️ {eta_text}\n\n"
     
     # Use the latest timestamp for display
     try:
@@ -559,7 +559,7 @@ def get_bus_arrivals(bus_stop_code):
     except:
         formatted_time = latest_time_result
     
-    response_text += f"ðŸ•’ Last updated: {formatted_time}"
+    response_text += f"🕒 Last updated: {formatted_time}"
     
     return {
         'response': response_text,
@@ -585,7 +585,7 @@ def check_specific_bus_at_stop(bus_number, stop_code, stop_name):
     if not latest_time_result:
         conn.close()
         return {
-            'response': f"âŒ No bus arrival data for {stop_name}.",
+            'response': f"❌ No bus arrival data for {stop_name}.",
             'type': 'error'
         }
     
@@ -614,7 +614,7 @@ def check_specific_bus_at_stop(bus_number, stop_code, stop_name):
     
     if not results:
         return {
-            'response': f"âŒ Bus {bus_number} doesn't serve **{stop_name}** ({stop_code}), or no arrival data is currently available.\n\n"
+            'response': f"❌ Bus {bus_number} doesn't serve **{stop_name}** ({stop_code}), or no arrival data is currently available.\n\n"
                        f"Try asking about the stop again to see which buses are available.",
             'type': 'bus_not_found',
             'stop_code': stop_code,
@@ -629,13 +629,13 @@ def check_specific_bus_at_stop(bus_number, stop_code, stop_name):
             return ""
         bus_type_upper = bus_type.upper()
         if bus_type_upper == 'SD':
-            return "ðŸšŒ Single Decker"
+            return "🚌 Single Decker"
         elif bus_type_upper == 'DD':
-            return "ðŸš Double Decker"
+            return "🚍 Double Decker"
         elif bus_type_upper == 'BD':
-            return "ðŸš Bendy Bus"
+            return "🚐 Bendy Bus"
         else:
-            return f"ðŸšŒ {bus_type}"
+            return f"🚌 {bus_type}"
     
     # Format ETAs
     etas = [row[1] for row in results]
@@ -648,12 +648,12 @@ def check_specific_bus_at_stop(bus_number, stop_code, stop_name):
         else:
             formatted_etas.append(f"{int(eta_val)} min")
     
-    eta_text = " â€¢ ".join(formatted_etas)
+    eta_text = " • ".join(formatted_etas)
     bus_type_text = format_bus_type(bus_type)
     
-    response_text = f"ðŸš **{stop_name}** ({stop_code})\n\n"
-    response_text += f"ðŸšŒ **Bus {service}** - {bus_type_text}\n"
-    response_text += f"â±ï¸ {eta_text}\n\n"
+    response_text = f"🚏 **{stop_name}** ({stop_code})\n\n"
+    response_text += f"🚌 **Bus {service}** - {bus_type_text}\n"
+    response_text += f"⏱️ {eta_text}\n\n"
     
     try:
         timestamp_obj = datetime.fromisoformat(latest_time_result)
@@ -661,7 +661,7 @@ def check_specific_bus_at_stop(bus_number, stop_code, stop_name):
     except:
         formatted_time = latest_time_result
     
-    response_text += f"ðŸ•’ Last updated: {formatted_time}"
+    response_text += f"🕒 Last updated: {formatted_time}"
     
     return {
         'response': response_text,
