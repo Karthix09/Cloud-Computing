@@ -124,54 +124,62 @@
       </div>
 
       <!-- Saved Locations Section -->
-      <div class="section">
-        <h3>Saved Locations</h3>
-        <form method="post" action="/delete_locations" id="deleteForm" onsubmit="return validateDeleteSelection();">
-          <table>
-            <tr>
-              <th><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"></th>
-              <th>Label</th>
-              <th>Address</th>
-              <th>Postal Code</th>
-              <th>Default Location</th>
-              <th>Actions</th>
-            </tr>
-            {% for loc in locations %}
-            <tr>
-              <td>
-                {% if not loc['is_favourite'] %}
-                <input type="checkbox" name="delete_ids" value="{{ loc['id'] }}">
-                {% endif %}
-              </td>
-              <td>{{ loc['label'] }}</td>
-              <td>{{ loc['address'] if loc['address'] else 'N/A' }}</td>
-              <td>{{ loc['postal_code'] if loc['postal_code'] else 'N/A' }}</td>
-              <td>
-                {% if loc['is_favourite'] %}
-                  🌟 Default
-                {% else %}
-                  <form method="post" action="/favourite_location/{{ loc['id'] }}" style="display:inline;">
-                    <button class="btn-small btn-default" type="submit">Set as Default</button>
-                  </form>
-                {% endif %}
-              </td>
-              <td>
-                {% if not loc['is_favourite'] %}
-                <form method="post" action="/delete_location/{{ loc['id'] }}" style="display:inline;">
-                  <button class="btn-small btn-delete" type="submit">Delete</button>
-                </form>
-                {% else %}
-                <span style="color:#888;">Protected</span>
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </table>
+     <!-- Saved Locations Section -->
+<div class="section">
+  <h3>Saved Locations</h3>
+  <form method="post" action="/delete_locations" id="deleteForm" onsubmit="return validateDeleteSelection();">
+    <table>
+      <tr>
+        <th><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"></th>
+        <th>Label</th>
+        <th>Address</th>
+        <th>Postal Code</th>
+        <th>Default Location</th>
+        <th>Actions</th>
+      </tr>
+      {% for loc in locations %}
+      <tr>
+        <td>
+          {% if not loc['is_favourite'] %}
+          <input type="checkbox" name="delete_ids" value="{{ loc['id'] }}">
+          {% endif %}
+        </td>
+        <td>{{ loc['label'] }}</td>
+        <td>{{ loc['address'] if loc['address'] else 'N/A' }}</td>
+        <td>{{ loc['postal_code'] if loc['postal_code'] else 'N/A' }}</td>
+        <td>
+          {% if loc['is_favourite'] %}
+            🌟 Default
+          {% else %}
+            <!-- FIXED: No nested form, use button with onclick -->
+            <button 
+              class="btn-small btn-default" 
+              type="button" 
+              onclick="setAsDefault({{ loc['id'] }})">
+              Set as Default
+            </button>
+          {% endif %}
+        </td>
+        <td>
+          {% if not loc['is_favourite'] %}
+            <!-- FIXED: No nested form, use button with onclick -->
+            <button 
+              class="btn-small btn-delete" 
+              type="button" 
+              onclick="deleteSingleLocation({{ loc['id'] }})">
+              Delete
+            </button>
+          {% else %}
+          <span style="color:#888;">Protected</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
 
-          <button class="btn-delete" type="submit" style="margin-top:10px;">Delete Selected</button>
-        </form>
-      </div>
-
+    <button class="btn-delete" type="submit" style="margin-top:10px;">Delete Selected</button>
+  </form>
+</div>
       <!-- Add Location Section -->
       <div class="section">
         <h3>Add New Location</h3>
@@ -211,6 +219,40 @@
       }
       return confirm("Are you sure you want to delete the selected location(s)?");
     }
+
+    // Set location as default - NEW FUNCTION
+  function setAsDefault(locationId) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/favourite_location/' + locationId;
+    document.body.appendChild(form);
+    form.submit();
+  }
+
+   // Delete single location - NEW FUNCTION
+  function deleteSingleLocation(locationId) {
+    if (confirm('Are you sure you want to delete this location?')) {
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '/delete_location/' + locationId;
+      document.body.appendChild(form);
+      form.submit();
+    }
+  }
+
+   // Validate location before submit
+  function validateLocation() {
+    const lat = document.getElementById('latitude').value;
+    const lon = document.getElementById('longitude').value;
+    const address = document.getElementById('address_full').value;
+    
+    if (!lat || !lon || !address) {
+      alert("Please select a location from the dropdown suggestions before adding.");
+      return false;
+    }
+    return true;
+  }
+
 
     // Google Map initialization function
     let map, marker, geocoder, autocomplete;
