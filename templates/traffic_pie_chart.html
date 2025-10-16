@@ -7,42 +7,80 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      text-align: center;
-      background-color: #f4f6f9;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       margin: 0;
-      padding: 20px;
-    }
-    h1 {
-      color: #0078d7;
-    }
-    .chart-box {
+      padding: 0;
+      min-height: 100vh;
       display: flex;
       justify-content: center;
+      align-items: flex-start; 
+      position: relative;
     }
+
+
     .back {
-      display: inline-block;
-      margin-top: 20px;
-      background: #0078d7;
+      position: absolute;
+      top: 30px;
+      left: 40px;
+      background: #1A2633;
       color: white;
       padding: 10px 20px;
       border-radius: 6px;
       text-decoration: none;
       font-weight: bold;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      transition: background 0.2s ease;
+    }
+
+    .back:hover {
+      background: #2b3b4d;
+    }
+    .container {
+      background: white;
+      border-radius: 16px;
+      padding: 30px 40px;
+      max-width: 850px;
+      width: 90%;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+      text-align: center;
+      margin-top: 120px; 
+      margin-bottom: 50px;
+    }
+
+    h1 {
+      color: #0078d7;
+      margin-top: 0;
+    }
+
+    .chart-box {
+      display: flex;
+      justify-content: center;
+      margin-top: 20px;
+    }
+
+    .last-update {
+      margin-top: 20px;
+      font-size: 0.95em;
+      color: #444;
     }
   </style>
 </head>
+
 <body>
-  <h1>Current Traffic Incidents by Type</h1>
-
-  {% if chart_html %}
-    <div class="chart-box">
-      {{ chart_html | safe }}
-    </div>
-  {% else %}
-    <p><b>No data available to generate chart.</b></p>
-  {% endif %}
-
-  <p>🕒 Last updated: {{ last_update }}</p>
   <a href="/traffic" class="back">⬅ Back to Dashboard</a>
+
+  <div class="container">
+    <h1>Current Traffic Incidents by Type</h1>
+
+    {% if chart_html %}
+      <div class="chart-box">
+        {{ chart_html | safe }}
+      </div>
+    {% else %}
+      <p><b>No data available to generate chart.</b></p>
+    {% endif %}
+
+    <p class="last-update">🕒 Last updated: {{ last_update }}</p>
+  </div>
 </body>
 </html>

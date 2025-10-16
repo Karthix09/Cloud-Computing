@@ -512,8 +512,8 @@ def build_traffic_map_from_df(df: pd.DataFrame) -> str:
     sg_map.fit_bounds(sg_bounds)
     return sg_map._repr_html_()
 
-@app.route("/traffic")
-@app.route("/")
+@app.route("/traffic", methods=["GET", "POST"])
+@app.route("/", methods=["GET", "POST"])
 def traffic_dashboard():
     search_query = request.form.get("search", "").strip() if request.method == "POST" else ""
     selected_type = request.form.get("type", "").strip() if request.method == "POST" else ""
@@ -615,7 +615,7 @@ def traffic_pie_chart():
     fig.update_traces(
         hoverinfo="text",
         hovertemplate="%{customdata}",
-        textinfo="percent+label",
+        textinfo="percent",
         customdata=hover_texts
     )
     fig.update_layout(width=800, height=450, showlegend=True)
