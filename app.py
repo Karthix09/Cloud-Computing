@@ -9,8 +9,8 @@ from sqlalchemy import create_engine, Table, Column, String, Float, MetaData, Da
 
 
 # Import auth module
-from database import init_users_db
-from auth import auth_bp, login_required, current_user, USERS_DB
+from database import init_users_db, init_bus_db, get_db_connection, get_bus_db_connection, IS_PRODUCTION
+from auth import auth_bp, login_required, current_user
 
 #Chatbot module
 from chatbot import chatbot_bp 
@@ -56,27 +56,11 @@ def require_login():
 # ==================== BUS MODULE ====================
 
 # Bus database setup
-def init_bus_db():
-    conn = sqlite3.connect(BUS_DB_FILE)
-    c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS bus_stops(
-        code TEXT PRIMARY KEY, description TEXT, road TEXT, lat REAL, lon REAL)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS bus_routes(
-        service TEXT, stop_code TEXT)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS bus_arrivals(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        stop_code TEXT,
-        service TEXT,
-        eta_min REAL,
-        bus_type TEXT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    )""")
-    conn.commit()
-    conn.close()
+
 
 # Load bus stops
 def load_bus_stops():
-    conn = sqlite3.connect(BUS_DB_FILE)
+    conn = get_bus_db_connection()
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM bus_stops")
     if c.fetchone()[0] > 0:
@@ -102,7 +86,7 @@ def load_bus_stops():
 
 # Background bus data collector
 def get_all_stops():
-    conn = sqlite3.connect(BUS_DB_FILE)
+    conn = get_bus_db_connection()  # NEW
     c = conn.cursor()
     c.execute("SELECT code FROM bus_stops")
     stops = [x[0] for x in c.fetchall()]
@@ -110,7 +94,7 @@ def get_all_stops():
     return stops
 
 def collect_bus_arrivals():
-    conn = sqlite3.connect(BUS_DB_FILE)
+    conn = get_bus_db_connection()  # NEW
     c = conn.cursor()
     stops = get_all_stops()
     now = datetime.now()
@@ -160,7 +144,7 @@ def background_bus_collector():
 @app.route("/bus_stops")
 def bus_stops():
     q = request.args.get("query", "").strip().lower()
-    conn = sqlite3.connect(BUS_DB_FILE)
+    conn = get_bus_db_connection()  # NEW
     c = conn.cursor()
     if q:
         like = f"%{q}%"
@@ -192,7 +176,7 @@ def bus_arrivals(code):
             results.append({"service": s["ServiceNo"], "type": s["NextBus"].get("Type"), "eta": waits})
 
         # Log
-        conn = sqlite3.connect(BUS_DB_FILE)
+        conn = get_bus_db_connection()  # NEW
         c = conn.cursor()
         for s in results:
             for eta in s["eta"]:
@@ -206,7 +190,7 @@ def bus_arrivals(code):
 
 @app.route("/bus/history/<stop_code>")
 def bus_history(stop_code):
-    conn = sqlite3.connect(BUS_DB_FILE)
+    conn = get_bus_db_connection()
     c = conn.cursor()
     c.execute("""
         SELECT strftime('%H', timestamp) as hour, service, AVG(eta_min)
@@ -225,7 +209,7 @@ def bus_history(stop_code):
 
 @app.route("/bus/history/all")
 def bus_history_all():
-    conn = sqlite3.connect(BUS_DB_FILE)
+    conn = get_bus_db_connection()  # NEW
     c = conn.cursor()
     c.execute("""
         SELECT strftime('%H', timestamp) as hour, AVG(eta_min)
@@ -243,7 +227,10 @@ def bus_history_all():
 def bus_dashboard():
     return render_template("bus_main.html")
 
+
+
 # API to get users favorite locations and show on the smart bus dashboard
+
 @app.route("/api/user_locations")
 @login_required
 def get_user_locations():
@@ -251,22 +238,27 @@ def get_user_locations():
     user = current_user()
     if not user:
         return jsonify([])
-    
-    # Use the same database and connection method as auth.py
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    USERS_DB = os.path.join(BASE_DIR, "users.db")
-    
-    conn = sqlite3.connect(USERS_DB)
-    conn.row_factory = sqlite3.Row
+    # Use get_db_connection from database.py
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
-        cursor.execute("""
-            SELECT id, label, latitude, longitude, address, postal_code, is_favourite
-            FROM locations
-            WHERE user_id = ?
-            ORDER BY is_favourite DESC, id DESC
-        """, (user["id"],))
+        if IS_PRODUCTION:
+            # PostgreSQL uses %s
+            cursor.execute("""
+                SELECT id, label, latitude, longitude, address, postal_code, is_favourite
+                FROM locations
+                WHERE user_id = %s
+                ORDER BY is_favourite DESC, id DESC
+            """, (user["id"],))
+        else:
+            # SQLite uses ?
+            cursor.execute("""
+                SELECT id, label, latitude, longitude, address, postal_code, is_favourite
+                FROM locations
+                WHERE user_id = ?
+                ORDER BY is_favourite DESC, id DESC
+            """, (user["id"],))
         
         locations = []
         for row in cursor.fetchall():
@@ -280,12 +272,48 @@ def get_user_locations():
                 "is_favourite": bool(row["is_favourite"])
             })
         
+        cursor.close()
+        conn.close()
         return jsonify(locations)
     except Exception as e:
         print(f"Error fetching user locations: {e}")
-        return jsonify([])
-    finally:
         conn.close()
+        return jsonify([])
+    
+    # Use the same database and connection method as auth.py
+    # BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    # USERS_DB = os.path.join(BASE_DIR, "users.db")
+    
+    # conn = sqlite3.connect(USERS_DB)
+    # conn.row_factory = sqlite3.Row
+    # cursor = conn.cursor()
+    
+    # try:
+    #     cursor.execute("""
+    #         SELECT id, label, latitude, longitude, address, postal_code, is_favourite
+    #         FROM locations
+    #         WHERE user_id = ?
+    #         ORDER BY is_favourite DESC, id DESC
+    #     """, (user["id"],))
+        
+    #     locations = []
+    #     for row in cursor.fetchall():
+    #         locations.append({
+    #             "id": row["id"],
+    #             "label": row["label"],
+    #             "lat": row["latitude"],
+    #             "lng": row["longitude"],
+    #             "address": row["address"] if row["address"] else "",
+    #             "postal_code": row["postal_code"] if row["postal_code"] else "",
+    #             "is_favourite": bool(row["is_favourite"])
+    #         })
+        
+    #     return jsonify(locations)
+    # except Exception as e:
+    #     print(f"Error fetching user locations: {e}")
+    #     return jsonify([])
+    # finally:
+    #     conn.close()
 
 
 
@@ -293,7 +321,6 @@ def get_user_locations():
 # ==================== BUS FAVORITES API ====================
 
 # Get user's favorite bus stops
-
 @app.route("/api/bus_favorites", methods=["GET"])
 @login_required
 def get_bus_favorites():
@@ -302,17 +329,24 @@ def get_bus_favorites():
     if not user:
         return jsonify([])
     
-    conn = sqlite3.connect(USERS_DB)
-    conn.row_factory = sqlite3.Row
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
-        cursor.execute("""
-            SELECT bus_stop_code, bus_stop_name
-            FROM bus_favorites
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-        """, (user["id"],))
+        if IS_PRODUCTION:
+            cursor.execute("""
+                SELECT bus_stop_code, bus_stop_name
+                FROM bus_favorites
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+            """, (user["id"],))
+        else:
+            cursor.execute("""
+                SELECT bus_stop_code, bus_stop_name
+                FROM bus_favorites
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+            """, (user["id"],))
         
         favorites = []
         for row in cursor.fetchall():
@@ -321,12 +355,13 @@ def get_bus_favorites():
                 "desc": row["bus_stop_name"]
             })
         
+        cursor.close()
+        conn.close()
         return jsonify(favorites)
     except Exception as e:
         print(f"Error fetching bus favorites: {e}")
-        return jsonify([])
-    finally:
         conn.close()
+        return jsonify([])
 
 #Add to bus stops to favorites
 
@@ -345,21 +380,30 @@ def add_bus_favorite():
     if not code or not desc:
         return jsonify({"error": "Missing bus stop info"}), 400
     
-    conn = sqlite3.connect(USERS_DB)
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
-        cursor.execute("""
-            INSERT OR IGNORE INTO bus_favorites (user_id, bus_stop_code, bus_stop_name)
-            VALUES (?, ?, ?)
-        """, (user["id"], code, desc))
+        if IS_PRODUCTION:
+            cursor.execute("""
+                INSERT INTO bus_favorites (user_id, bus_stop_code, bus_stop_name)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (user_id, bus_stop_code) DO NOTHING
+            """, (user["id"], code, desc))
+        else:
+            cursor.execute("""
+                INSERT OR IGNORE INTO bus_favorites (user_id, bus_stop_code, bus_stop_name)
+                VALUES (?, ?, ?)
+            """, (user["id"], code, desc))
+        
         conn.commit()
+        cursor.close()
+        conn.close()
         return jsonify({"success": True, "message": "Added to favorites"})
     except Exception as e:
         print(f"Error adding bus favorite: {e}")
-        return jsonify({"error": str(e)}), 500
-    finally:
         conn.close()
+        return jsonify({"error": str(e)}), 500
 
 # Delete bus stop from favorites
 
@@ -377,22 +421,29 @@ def remove_bus_favorite():
     if not code:
         return jsonify({"error": "Missing bus stop code"}), 400
     
-    conn = sqlite3.connect(USERS_DB)
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
-        cursor.execute("""
-            DELETE FROM bus_favorites
-            WHERE user_id = ? AND bus_stop_code = ?
-        """, (user["id"], code))
+        if IS_PRODUCTION:
+            cursor.execute("""
+                DELETE FROM bus_favorites
+                WHERE user_id = %s AND bus_stop_code = %s
+            """, (user["id"], code))
+        else:
+            cursor.execute("""
+                DELETE FROM bus_favorites
+                WHERE user_id = ? AND bus_stop_code = ?
+            """, (user["id"], code))
+        
         conn.commit()
+        cursor.close()
+        conn.close()
         return jsonify({"success": True, "message": "Removed from favorites"})
     except Exception as e:
         print(f"Error removing bus favorite: {e}")
-        return jsonify({"error": str(e)}), 500
-    finally:
         conn.close()
-
+        return jsonify({"error": str(e)}), 500
 
 
 # ==================== TRAFFIC MODULE ====================
