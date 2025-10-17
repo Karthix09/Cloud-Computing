@@ -1,8 +1,12 @@
 import os
 import sqlite3
 
-# Check if running on AWS or production
-IS_PRODUCTION = os.getenv('AWS_EXECUTION_ENV') or os.getenv('FLASK_ENV') == 'production'
+#Auto-detect production environment
+IS_PRODUCTION = (
+    os.getenv('AWS_EXECUTION_ENV') is not None or 
+    os.getenv('FLASK_ENV') == 'production' or
+    os.getenv('DB_HOST', '').endswith('.rds.amazonaws.com')
+)
 
 if IS_PRODUCTION:
     import psycopg2
@@ -20,10 +24,11 @@ def get_db_connection():
         conn = psycopg2.connect(
             host=os.getenv('DB_HOST'),
             port=int(os.getenv('DB_PORT', 5432)),
-            database=os.getenv('DB_NAME', 'transport_analytics'),
-            user=os.getenv('DB_USER', 'dbadmin'),
+            database=os.getenv('DB_NAME', 'transport_buddy'),
+            user=os.getenv('DB_USER', 'projectadmin'),
             password=os.getenv('DB_PASSWORD'),
-            cursor_factory=RealDictCursor
+            cursor_factory=RealDictCursor,
+            connect_timeout=10
         )
         print("✅ Connected to PostgreSQL (Production)")
     else:

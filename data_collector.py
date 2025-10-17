@@ -5,8 +5,8 @@ Collects live bus arrival data across Singapore from LTA DataMall every few minu
 and stores it in the shared 'bus_data.db' used by app.py.
 
 Make sure to:
-1️⃣ Have a valid .env file with API_KEY and BASE_URL
-2️⃣ Run this script alongside your Flask app (in another terminal)
+Have a valid .env file with API_KEY and BASE_URL
+Run this script alongside your Flask app (in another terminal)
 """
 
 import os

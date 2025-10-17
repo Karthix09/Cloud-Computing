@@ -1,12 +1,12 @@
 import os, sqlite3, requests, threading, time, re
-from datetime import datetime
+from datetime import datetime, timedelta  
 from flask import Flask, jsonify, render_template, request, redirect, url_for, session
 from dotenv import load_dotenv
 import pandas as pd
 import folium
 from sqlalchemy import create_engine, Table, Column, String, Float, MetaData, DateTime
 
-
+load_dotenv()
 
 # Import auth module
 from database import init_users_db, init_bus_db, get_db_connection, get_bus_db_connection, IS_PRODUCTION
@@ -15,14 +15,12 @@ from auth import auth_bp, login_required, current_user
 #Chatbot module
 from chatbot import chatbot_bp 
 
+# ADD these imports here
+from config import config
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Initialize users database
 init_users_db()
-
-# Load environment variables
-load_dotenv()
-
-
 
 # ==================== CONFIGURATION ====================
 API_KEY = os.getenv("API_KEY")
@@ -38,10 +36,34 @@ BUS_DB_FILE = os.path.join(BASE_DIR, "database/bus_data.db")
 
 # ==================== FLASK APP ====================
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "change-me-to-strong-secret")
-app.register_blueprint(auth_bp)
 
-# ==================== CHATBOT blueprint ====================
+# Load config based on environment
+env = os.getenv('FLASK_ENV', 'production')
+app.config.from_object(config[env])
+
+# Set SECRET_KEY from environment
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+
+# Session configuration
+app.config.update(
+    SESSION_COOKIE_NAME='transport_session',
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=24),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=False  # Set True when using HTTPS
+)
+
+# Add ProxyFix for AWS ALB/nginx
+app.wsgi_app = ProxyFix(
+    app.wsgi_app,
+    x_for=1,
+    x_proto=1,
+    x_host=1,
+    x_prefix=1
+)
+
+app.register_blueprint(auth_bp)
+# ADD chatbot blueprint registration
 app.register_blueprint(chatbot_bp)
 
 # ==================== LOGIN REQUIRED ====================

@@ -62,10 +62,8 @@ def login():
     cursor = conn.cursor()
     
     if IS_PRODUCTION:
-        # PostgreSQL
         cursor.execute("SELECT * FROM users WHERE username=%s", (username,))
     else:
-        # SQLite
         cursor.execute("SELECT * FROM users WHERE username=?", (username,))
     
     row = cursor.fetchone()
@@ -76,10 +74,15 @@ def login():
         flash("Invalid username or password.", "error")
         return render_template("login.html"), 401
     
+    session.clear()
+    session.permanent = True 
     session["user_id"] = row["id"]
     session["username"] = row["username"]
+    
+    print(f"✅ Login successful for {username}")
+    print(f"   User ID: {session.get('user_id')}")
+    
     return redirect("/bus")
-
 
 @auth_bp.route("/logout")
 def logout():
