@@ -100,6 +100,40 @@ def load_bus_stops():
     conn.close()
     print("✅ Bus stops cached.")
 
+def load_bus_routes():
+    conn = sqlite3.connect(BUS_DB_FILE)
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS bus_routes (
+        ServiceNo TEXT,
+        Direction INTEGER,
+        StopSequence INTEGER,
+        BusStopCode TEXT,
+        Distance REAL
+    )""")
+    conn.commit()
+
+    print("📥 Loading bus routes ...")
+    skip = 0
+    while True:
+        r = requests.get(f"{BASE_URL}/BusRoutes?$skip={skip}", headers=BUS_HEADERS, timeout=20)
+        data = r.json().get("value", [])
+        if not data:
+            break
+        for route in data:
+            c.execute("""
+                INSERT OR REPLACE INTO bus_routes VALUES (?,?,?,?,?)
+            """, (
+                route["ServiceNo"], route["Direction"],
+                route["StopSequence"], route["BusStopCode"],
+                route.get("Distance", 0.0)
+            ))
+        conn.commit()
+        if len(data) < 500:
+            break
+        skip += 500
+    conn.close()
+    print("✅ Bus routes cached.")
+
 # Background bus data collector
 def get_all_stops():
     conn = sqlite3.connect(BUS_DB_FILE)
@@ -172,6 +206,64 @@ def bus_stops():
     rows = c.fetchall()
     conn.close()
     return jsonify([{"code": r[0], "desc": r[1], "road": r[2], "lat": r[3], "lon": r[4]} for r in rows])
+
+@app.route("/bus_routes")
+def get_bus_routes():
+    service = request.args.get("service")
+    direction = request.args.get("direction", 1)
+    conn = sqlite3.connect(BUS_DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT ServiceNo, Direction, StopSequence, BusStopCode FROM bus_routes WHERE ServiceNo = ? AND Direction = ? ORDER BY StopSequence", (service, direction))
+    rows = c.fetchall()
+    conn.close()
+    return jsonify([
+        {"ServiceNo": r[0], "Direction": r[1], "StopSequence": r[2], "BusStopCode": r[3]}
+        for r in rows
+    ])
+
+@app.route("/api/route", methods=["POST"])
+def get_route():
+    data = request.get_json()
+    origin = data.get("origin")
+    destination = data.get("destination")
+    if not origin or not destination:
+        return jsonify({"error": "Missing origin or destination"}), 400
+
+    conn = sqlite3.connect(BUS_DB_FILE)
+    c = conn.cursor()
+
+    # find all services passing through origin and destination
+    c.execute("SELECT DISTINCT ServiceNo, Direction, StopSequence FROM bus_routes WHERE BusStopCode = ?", (origin,))
+    origin_rows = c.fetchall()
+
+    c.execute("SELECT DISTINCT ServiceNo, Direction, StopSequence FROM bus_routes WHERE BusStopCode = ?", (destination,))
+    dest_rows = c.fetchall()
+
+    possible_routes = []
+    for svc, direction, seq_o in origin_rows:
+        for svc2, direction2, seq_d in dest_rows:
+            if svc == svc2 and direction == direction2 and seq_o < seq_d:
+                # same service + direction and origin occurs before destination
+                stop_count = seq_d - seq_o
+                est_time = round(stop_count * 1.5, 1)  # 1.5 min per stop
+                possible_routes.append({
+                    "service": svc,
+                    "direction": direction,
+                    "stops": stop_count,
+                    "estimated_time_min": est_time
+                })
+
+    conn.close()
+
+    if not possible_routes:
+        return jsonify({"message": "No direct bus route found"}), 404
+
+    top3 = sorted(possible_routes, key=lambda r: r["estimated_time_min"])[:3]
+    return jsonify({
+        "origin": origin,
+        "destination": destination,
+        "routes": top3
+    })
 
 @app.route("/bus_arrivals/<code>")
 def bus_arrivals(code):
@@ -631,6 +723,7 @@ if __name__ == "__main__":
     # Initialize bus module
     init_bus_db()
     load_bus_stops()
+    load_bus_routes()
     
     # Start background threads
     threading.Thread(target=background_bus_collector, daemon=True).start()

@@ -7,8 +7,10 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
 
 <style>
 :root {
@@ -241,6 +243,43 @@ button.refresh { grid-column: 3; justify-self: end; }
   transition: background 0.4s;
 }
 .compare-card h4 { margin: 8px 0; }
+
+.btn-map {
+  background-color: #2c3e50;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+.btn-map:hover {
+  background-color: #2c3e50;
+}
+
+.card-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: center;
+  align-items: stretch;
+  margin-top: 10px;
+}
+
+.compare-card {
+  flex: 0 1 300px;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  background: #fff;
+  transition: transform 0.2s ease;
+}
+
+.compare-card:hover {
+  transform: translateY(-3px);
+}
+
 </style>
 </head>
 
@@ -263,6 +302,29 @@ button.refresh { grid-column: 3; justify-self: end; }
   <button class="reset" onclick="resetMap()">Reset</button>
 </div>
 
+<!-- 🧭 Route Calculator Panel -->
+<div id="routeControls" style="
+  position: absolute;
+  top: 160px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  width: 80%;
+  max-width: 700px;
+  background: var(--card-bg);
+  border-radius: 16px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+  padding: 12px 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;">
+  <input id="origin" placeholder="From (Bus Stop Code)" style="flex:1;padding:10px 14px;border-radius:10px;border:1px solid #ccc;">
+  <input id="destination" placeholder="To (Bus Stop Code)" style="flex:1;padding:10px 14px;border-radius:10px;border:1px solid #ccc;">
+  <button class="search" onclick="calculateRoute()">Find Route</button>
+  <button class="reset" onclick="resetRoute()">Reset</button>
+</div>
+
 <div id="map"></div>
 
 <div class="bus-card">
@@ -279,11 +341,21 @@ button.refresh { grid-column: 3; justify-self: end; }
   </table>
 
   <div id="favorites">
-    <h4>Favorite Stops</h4>
+    <h3>Favorite Stops</h3>
     <div id="favList"></div>
   </div>
 
-  <div id="compareContainer"></div>
+  <!-- Top-3-Routes Section -->
+  <div id="routeSection" style="margin-top:20px;">
+    <h3>Top 3 Fastest Route(s)</h3>
+    <div id="routeContainer" class="card-row"></div>
+  </div>
+
+  <!-- Compare Section -->
+  <div id="compareSection" style="margin-top:30px;">
+    <h3>Compare</h3>
+    <div id="compareContainer" class="card-row"></div>
+  </div>
 </div>
 
 <script>
@@ -296,9 +368,127 @@ let favoriteStops = JSON.parse(localStorage.getItem("favorites") || "[]");
 let compareStops = [];
 let savedLocationMarkers = []; // Array to store saved location markers
 
+// Pressing Enter in the search box triggers the Search button
+document.getElementById("query").addEventListener("keypress", function (event) {
+  if (event.key === "Enter") {
+    event.preventDefault(); // prevent page reload
+    searchStops(); // call your existing search function
+  }
+});
+
+// Pressing Enter in either route input triggers Find Route
+["origin", "destination"].forEach(id => {
+  document.getElementById(id).addEventListener("keypress", function (event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      calculateRoute(); // call your existing Find Route function
+    }
+  });
+});
+
+/* ROUTE CALCULATOR */
+async function calculateRoute() {
+  const origin = document.getElementById("origin").value.trim();
+  const destination = document.getElementById("destination").value.trim();
+
+  if (!origin || !destination) {
+    alert("Please enter both origin and destination bus stop codes");
+    return;
+  }
+
+  const response = await fetch("/api/route", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({origin, destination})
+  });
+
+  const data = await response.json();
+  console.log("Route result:", data);
+
+  const routeContainer = document.getElementById("routeContainer");
+  routeContainer.innerHTML = "";
+
+  if (data.routes && data.routes.length) {
+    routeContainer.innerHTML = data.routes.map((r, i) => `
+      <div class="compare-card">
+        <h4>Option ${i + 1}: Bus ${r.service}</h4>
+        <p>Stops: ${r.stops}</p>
+        <p>Estimated Time: <b>${r.estimated_time_min} min</b></p>
+        <button class="btn-map" onclick="drawRoute('${r.service}', '${origin}', '${destination}', ${r.direction})">
+          Show on Map
+        </button>
+      </div>
+    `).join("");
+  } else {
+    routeContainer.innerHTML = "<p>No direct route found.</p>";
+  }
+}
+
+async function drawRoute(serviceNo, origin, destination, direction=1) {
+  // remove previous route
+  if (window.routeControl) {
+    map.removeControl(window.routeControl);
+  }
+
+  const res = await fetch(`/bus_routes?service=${serviceNo}&direction=${direction}`);
+  const data = await res.json();
+
+  const stops = data.map(r => r.BusStopCode);
+  const i1 = stops.indexOf(origin);
+  const i2 = stops.indexOf(destination);
+  if (i1 === -1 || i2 === -1 || i1 >= i2) {
+    alert("Cannot map this route segment.");
+    return;
+  }
+
+  const startRes = await fetch(`/bus_stops?query=${origin}`);
+  const startData = await startRes.json();
+  const endRes = await fetch(`/bus_stops?query=${destination}`);
+  const endData = await endRes.json();
+
+  if (!startData.length || !endData.length) return;
+
+  const start = L.latLng(startData[0].lat, startData[0].lon);
+  const end = L.latLng(endData[0].lat, endData[0].lon);
+
+  window.routeControl = L.Routing.control({
+    waypoints: [start, end],
+    lineOptions: {
+      styles: [{color: "#0033cc", weight: 5}]
+    },
+    addWaypoints: false,
+    draggableWaypoints: false,
+    fitSelectedRoutes: true
+  }).addTo(map);
+}
+
+/* RESET ROUTE */
+function resetRoute() {
+  // Clear input fields
+  document.getElementById("origin").value = "";
+  document.getElementById("destination").value = "";
+
+  // Clear route results display
+  const container = document.getElementById("compareContainer");
+  if (container) container.innerHTML = "";
+
+  // Remove any drawn route line (polyline or routing control)
+  if (window.drawnRoute) {
+    map.removeLayer(window.drawnRoute);
+    window.drawnRoute = null;
+  }
+
+  if (window.routeControl) {
+    map.removeControl(window.routeControl);
+    window.routeControl = null;
+  }
+
+  // Optional: reset map view to Singapore default (like your main reset button)
+  map.setView([1.3521, 103.8198], 12);
+}
+
 // Load Favourite Bus Stops from API
 // UPDATED: Load favorites from database instead of localStorage
-
 async function loadFavoritesFromDB() {
   try {
     const response = await fetch('/api/bus_favorites');
@@ -310,10 +500,7 @@ async function loadFavoritesFromDB() {
   }
 }
 
-
-
 // UPDATED: Add favorite Bus Stops to database
-
 async function addFavorite(code, desc) {
   if (favoriteStops.find(f => f.code === code)) {
     alert("Already added!");
@@ -340,9 +527,7 @@ async function addFavorite(code, desc) {
   }
 }
 
-
 // UPDATED: Remove favorite from database
-
 async function removeFavorite(code) {
   try {
     const response = await fetch('/api/bus_favorites/remove', {
@@ -376,11 +561,6 @@ function updateFavDisplay(){
     favDiv.appendChild(div);
   });
 }
-
-
-
-
-
 
 // Add user's saved locations in settings to map----- NOT WORKING ------
 async function loadUserSavedLocations() {
@@ -442,15 +622,13 @@ async function loadUserSavedLocations() {
   }
 }
 
-
-
 async function loadAllStops(){
  const res=await fetch("bus_stops");
  const stops=await res.json();
  cluster.clearLayers();
  stops.forEach(s=>{
    const m=L.marker([s.lat,s.lon]).bindPopup(`
-     <b>${s.desc}</b><br>${s.road}<br>
+     <b>${s.code}</b><br><b>${s.desc}</b><br>${s.road}
      <button onclick="loadArrivals('${s.code}','${s.desc}')">Show Arrivals</button>
      <button onclick="addFavorite('${s.code}','${s.desc}')">Add Favs</button>
      <button onclick="addCompare('${s.code}','${s.desc}')">Compare</button>`);
@@ -544,7 +722,7 @@ async function searchStops(){
  cluster.clearLayers();
  stops.forEach(s=>{
    const m=L.marker([s.lat,s.lon]).bindPopup(`
-     <b>${s.desc}</b><br>${s.road}<br>
+     <b>${s.code}</b><br><b>${s.desc}</b><br>${s.road}
      <button onclick="loadArrivals('${s.code}','${s.desc}')">Show Arrivals</button>
      <button onclick="addFavorite('${s.code}','${s.desc}')">⭐ Add Fav</button>
      <button onclick="addCompare('${s.code}','${s.desc}')">Compare</button>`);
