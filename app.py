@@ -15,14 +15,11 @@ from auth import auth_bp, login_required, current_user, USERS_DB
 #Chatbot module
 from chatbot import chatbot_bp 
 
-
 # Initialize users database
 init_users_db()
 
 # Load environment variables
 load_dotenv()
-
-
 
 # ==================== CONFIGURATION ====================
 API_KEY = os.getenv("API_KEY")
@@ -232,38 +229,81 @@ def get_route():
     conn = sqlite3.connect(BUS_DB_FILE)
     c = conn.cursor()
 
-    # find all services passing through origin and destination
-    c.execute("SELECT DISTINCT ServiceNo, Direction, StopSequence FROM bus_routes WHERE BusStopCode = ?", (origin,))
-    origin_rows = c.fetchall()
+    # Step 1: Direct routes (same service & direction)
+    c.execute("""
+        SELECT a.ServiceNo, a.Direction, a.StopSequence as seq1, b.StopSequence as seq2
+        FROM bus_routes a
+        JOIN bus_routes b
+        ON a.ServiceNo = b.ServiceNo AND a.Direction = b.Direction
+        WHERE a.BusStopCode = ? AND b.BusStopCode = ? AND a.StopSequence < b.StopSequence
+    """, (origin, destination))
+    direct_routes = c.fetchall()
 
-    c.execute("SELECT DISTINCT ServiceNo, Direction, StopSequence FROM bus_routes WHERE BusStopCode = ?", (destination,))
-    dest_rows = c.fetchall()
+    results = []
+    for svc, direction, seq1, seq2 in direct_routes:
+        stops = seq2 - seq1
+        est_time = round(stops * 1.5, 1)
+        results.append({
+            "service": svc,
+            "direction": direction,
+            "stops": stops,
+            "estimated_time_min": est_time
+        })
 
-    possible_routes = []
-    for svc, direction, seq_o in origin_rows:
-        for svc2, direction2, seq_d in dest_rows:
-            if svc == svc2 and direction == direction2 and seq_o < seq_d:
-                # same service + direction and origin occurs before destination
-                stop_count = seq_d - seq_o
-                est_time = round(stop_count * 1.5, 1)  # 1.5 min per stop
-                possible_routes.append({
-                    "service": svc,
-                    "direction": direction,
-                    "stops": stop_count,
-                    "estimated_time_min": est_time
-                })
+    # Step 2: Transfer routes (two buses)
+    if not results:
+        # Find all buses from origin
+        c.execute("SELECT DISTINCT ServiceNo, Direction FROM bus_routes WHERE BusStopCode = ?", (origin,))
+        origin_services = c.fetchall()
+
+        # Find all buses that go to destination
+        c.execute("SELECT DISTINCT ServiceNo, Direction FROM bus_routes WHERE BusStopCode = ?", (destination,))
+        dest_services = c.fetchall()
+
+        transfer_routes = []
+        for svc1, dir1 in origin_services:
+            # Get all stops this bus passes
+            c.execute("SELECT BusStopCode, StopSequence FROM bus_routes WHERE ServiceNo=? AND Direction=?", (svc1, dir1))
+            svc1_stops = c.fetchall()
+
+            for svc2, dir2 in dest_services:
+                c.execute("SELECT BusStopCode, StopSequence FROM bus_routes WHERE ServiceNo=? AND Direction=?", (svc2, dir2))
+                svc2_stops = c.fetchall()
+
+                # Find common transfer stops
+                common_stops = set([s[0] for s in svc1_stops]) & set([s[0] for s in svc2_stops])
+                for transfer_stop in common_stops:
+                    # Compute total estimated time
+                    seq_o = next((s[1] for s in svc1_stops if s[0] == origin), None)
+                    seq_t1 = next((s[1] for s in svc1_stops if s[0] == transfer_stop), None)
+                    seq_t2 = next((s[1] for s in svc2_stops if s[0] == transfer_stop), None)
+                    seq_d = next((s[1] for s in svc2_stops if s[0] == destination), None)
+
+                    if seq_o is not None and seq_t1 is not None and seq_t2 is not None and seq_d is not None and seq_o < seq_t1 and seq_t2 < seq_d:
+                        total_stops = (seq_t1 - seq_o) + (seq_d - seq_t2)
+                        est_time = round(total_stops * 1.5 + 3, 1)  # +3 mins for transfer wait
+                        transfer_routes.append({
+                            "transfer": True,
+                            "legs": [
+                                {"service": svc1, "from": origin, "to": transfer_stop, "stops": seq_t1 - seq_o},
+                                {"service": svc2, "from": transfer_stop, "to": destination, "stops": seq_d - seq_t2}
+                            ],
+                            "estimated_time_min": est_time
+                        })
+
+        # keep only top 3 fastest
+        transfer_routes = sorted(transfer_routes, key=lambda x: x["estimated_time_min"])[:3]
+        results.extend(transfer_routes)
 
     conn.close()
 
-    if not possible_routes:
-        return jsonify({"message": "No direct bus route found"}), 404
+    if not results:
+        return jsonify({"message": "No routes found"}), 404
 
-    top3 = sorted(possible_routes, key=lambda r: r["estimated_time_min"])[:3]
-    return jsonify({
-        "origin": origin,
-        "destination": destination,
-        "routes": top3
-    })
+    # keep only top 3 routes
+    results = sorted(results, key=lambda x: x["estimated_time_min"])[:3]
+    return jsonify({"origin": origin, "destination": destination, "routes": results})
+
 
 @app.route("/bus_arrivals/<code>")
 def bus_arrivals(code):

@@ -267,17 +267,58 @@ button.refresh { grid-column: 3; justify-self: end; }
 }
 
 .compare-card {
-  flex: 0 1 300px;
+  flex: 1 1 300px;
+  max-width: 350px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   border: 1px solid #ccc;
-  border-radius: 10px;
-  padding: 12px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  background: #fff;
-  transition: transform 0.2s ease;
+  border-radius: 12px;
+  padding: 15px;
+  background: var(--card-bg);
+  color: var(--text-color);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  transition: transform 0.2s ease, background 0.3s;
 }
 
 .compare-card:hover {
   transform: translateY(-3px);
+}
+
+@media (max-width: 768px) {
+  .compare-card {
+    flex: 1 1 100%;
+    max-width: 95%;
+  }
+}
+
+/* === Dark Mode Fixes for Cards & Routing Panel === */
+body.dark .compare-card {
+  background: var(--card-bg);
+  color: var(--text-color);
+  border-color: #555;
+}
+
+body.dark .compare-card table {
+  background: var(--card-bg);
+  color: var(--text-color);
+}
+
+body.dark .leaflet-routing-container {
+  background: var(--card-bg) !important;
+  color: var(--text-color) !important;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+}
+
+body.dark .leaflet-routing-alt,
+body.dark .leaflet-routing-geocoders {
+  background: var(--card-bg) !important;
+  color: var(--text-color) !important;
+}
+
+body.dark .leaflet-routing-container a {
+  color: var(--accent) !important;
 }
 
 </style>
@@ -399,7 +440,7 @@ async function calculateRoute() {
   const response = await fetch("/api/route", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({origin, destination})
+    body: JSON.stringify({ origin, destination })
   });
 
   const data = await response.json();
@@ -409,18 +450,36 @@ async function calculateRoute() {
   routeContainer.innerHTML = "";
 
   if (data.routes && data.routes.length) {
-    routeContainer.innerHTML = data.routes.map((r, i) => `
-      <div class="compare-card">
-        <h4>Option ${i + 1}: Bus ${r.service}</h4>
-        <p>Stops: ${r.stops}</p>
-        <p>Estimated Time: <b>${r.estimated_time_min} min</b></p>
-        <button class="btn-map" onclick="drawRoute('${r.service}', '${origin}', '${destination}', ${r.direction})">
-          Show on Map
-        </button>
-      </div>
-    `).join("");
+    routeContainer.innerHTML = data.routes.map((r, i) => {
+      if (r.transfer) {
+        // Multi-bus transfer route display
+        const legsHTML = r.legs.map((leg, j) => `
+          <li>Take Bus <b>${leg.service}</b> from <b>${leg.from}</b> → <b>${leg.to}</b> (${leg.stops} stops)</li>
+        `).join("");
+        return `
+          <div class="compare-card">
+            <h4>Option ${i + 1}: ${r.legs.length} Buses (Transfer)</h4>
+            <ul style="text-align:left; margin:0 0 10px 0; padding-left:18px;">${legsHTML}</ul>
+            <p><b>Total Estimated Time:</b> ${r.estimated_time_min} min</p>
+            <button class="btn-map" onclick='drawMultiRoute(${JSON.stringify(r.legs)})'>Show on Map</button>
+          </div>
+        `;
+      } else {
+        // Single direct route display
+        return `
+          <div class="compare-card">
+            <h4>Option ${i + 1}: Bus ${r.service}</h4>
+            <p>Stops: ${r.stops}</p>
+            <p>Estimated Time: <b>${r.estimated_time_min} min</b></p>
+            <button class="btn-map" onclick="drawRoute('${r.service}', '${origin}', '${destination}', ${r.direction})">
+              Show on Map
+            </button>
+          </div>
+        `;
+      }
+    }).join("");
   } else {
-    routeContainer.innerHTML = "<p>No direct route found.</p>";
+    routeContainer.innerHTML = "<p>No route found.</p>";
   }
 }
 
@@ -456,6 +515,33 @@ async function drawRoute(serviceNo, origin, destination, direction=1) {
     lineOptions: {
       styles: [{color: "#0033cc", weight: 5}]
     },
+    addWaypoints: false,
+    draggableWaypoints: false,
+    fitSelectedRoutes: true
+  }).addTo(map);
+}
+
+// Draw multiple bus legs on map (for transfer routes)
+async function drawMultiRoute(legs) {
+  if (window.routeControl) {
+    map.removeControl(window.routeControl);
+  }
+
+  const waypoints = [];
+  for (const leg of legs) {
+    const startRes = await fetch(`/bus_stops?query=${leg.from}`);
+    const startData = await startRes.json();
+    const endRes = await fetch(`/bus_stops?query=${leg.to}`);
+    const endData = await endRes.json();
+    if (startData.length && endData.length) {
+      waypoints.push(L.latLng(startData[0].lat, startData[0].lon));
+      waypoints.push(L.latLng(endData[0].lat, endData[0].lon));
+    }
+  }
+
+  window.routeControl = L.Routing.control({
+    waypoints,
+    lineOptions: { styles: [{ color: "#0033cc", weight: 5 }] },
     addWaypoints: false,
     draggableWaypoints: false,
     fitSelectedRoutes: true
