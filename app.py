@@ -1,12 +1,11 @@
 import os, sqlite3, requests, threading, time, re
-from datetime import datetime
 from flask import Flask, jsonify, render_template, request, redirect, url_for, session
 from dotenv import load_dotenv
 import pandas as pd
 import folium
 from sqlalchemy import create_engine, Table, Column, String, Float, MetaData, DateTime
-
-
+from datetime import datetime, timezone, timedelta
+from dateutil import parser  # make sure python-dateutil is installed
 
 # Import auth module
 from database import init_users_db
@@ -143,11 +142,32 @@ def get_all_stops():
     conn.close()
     return stops
 
+def cleanup_old_bus_data():
+    """Delete bus arrival records older than today."""
+    try:
+        conn = sqlite3.connect(BUS_DB_FILE)
+        c = conn.cursor()
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        # Delete all records not from today
+        c.execute("DELETE FROM bus_arrivals WHERE date(timestamp) < ?", (today,))
+        deleted = c.rowcount
+        conn.commit()
+        conn.close()
+
+        print(f"🧹 Cleaned up {deleted} old bus arrival records (kept only today's data).")
+    except Exception as e:
+        print("⚠️ Cleanup failed:", e)
+
+last_bus_update = None
+
 def collect_bus_arrivals():
     conn = sqlite3.connect(BUS_DB_FILE)
     c = conn.cursor()
     stops = get_all_stops()
-    now = datetime.now()
+    
+    # Use Singapore time
+    now = datetime.now(timezone(timedelta(hours=8)))
 
     for code in stops:
         try:
@@ -157,29 +177,44 @@ def collect_bus_arrivals():
             for s in data:
                 service = s["ServiceNo"]
                 btype = s["NextBus"].get("Type", "Unknown")
+
                 for key in ["NextBus", "NextBus2", "NextBus3"]:
                     t = s[key].get("EstimatedArrival")
                     if not t:
                         continue
-                    eta = datetime.fromisoformat(t.replace("+08:00", ""))
+                    
+                    # ✅ Parse ISO timestamp with timezone correctly
+                    eta = parser.isoparse(t)  # keeps +08:00 offset
                     diff = (eta - now).total_seconds() / 60
+
                     if diff >= 0:
-                        c.execute("""SELECT eta_min FROM bus_arrivals
-                                     WHERE stop_code=? AND service=?
-                                     ORDER BY timestamp DESC LIMIT 1""",
-                                  (code, service))
+                        c.execute("""
+                            SELECT eta_min FROM bus_arrivals
+                            WHERE stop_code=? AND service=?
+                            ORDER BY timestamp DESC LIMIT 1
+                        """, (code, service))
                         last = c.fetchone()
+                        
                         if not last or abs(last[0] - diff) > 0.3:
                             c.execute("""
                                 INSERT INTO bus_arrivals (stop_code, service, eta_min, bus_type, timestamp)
                                 VALUES (?,?,?,?,?)
-                            """, (code, service, round(diff, 1), btype, now.strftime("%Y-%m-%d %H:%M:%S")))
+                            """, (
+                                code, service, round(diff, 1), btype,
+                                now.strftime("%Y-%m-%dT%H:%M:%S")  # ISO8601 format
+
+                            ))
             conn.commit()
             time.sleep(0.4)
+
         except Exception as e:
             print(f"⚠️ Error fetching stop {code}: {e}")
+
     conn.close()
-    print(f"✅ Bus collector cycle done at {datetime.now().strftime('%H:%M:%S')}")
+    global last_bus_update
+    last_bus_update = now.strftime("%Y-%m-%d %H:%M:%S")
+    print(f"✅ Bus data refreshed at {last_bus_update}")
+
 
 def background_bus_collector():
     print("🧠 Bus background collector started (every 1 min).")
@@ -189,6 +224,12 @@ def background_bus_collector():
         except Exception as e:
             print("Bus collector failed:", e)
         time.sleep(60)
+
+@app.route("/api/last_bus_update")
+def get_last_bus_update():
+    global last_bus_update
+    return jsonify({"last_update": last_bus_update or "Not yet updated"})
+
 
 # Bus API endpoints
 @app.route("/bus_stops")
@@ -716,6 +757,84 @@ def traffic_pie_chart():
 
     return render_template("traffic_pie_chart.html", chart_html=chart_html, last_update=traffic_last_update)
 
+    #----------------- BUS DELAY TREND API -----------------#
+#----------------- BUS DELAY TREND API -----------------#
+@app.route("/api/bus_delay_trend/<stop_code>/<service>")
+def get_bus_delay_trend(stop_code, service):
+    try:
+        conn = sqlite3.connect(BUS_DB_FILE)
+
+        # ✅ Only consider the last 30 minutes (most recent bus cycle)
+        df = pd.read_sql_query("""
+            SELECT stop_code, service, eta_min, timestamp
+            FROM bus_arrivals
+            WHERE stop_code = ?
+              AND service = ?
+              AND timestamp >= datetime('now', '-30 minutes')
+            ORDER BY timestamp DESC
+        """, conn, params=(stop_code, service))
+        conn.close()
+
+        if df.empty:
+            return jsonify({
+                "stop_code": stop_code,
+                "service": service,
+                "avg_delay": 0,
+                "samples": 0,
+                "status": "No data"
+            }), 200
+
+        # Parse timestamps properly
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+        df = df.dropna(subset=["timestamp", "eta_min"])
+        df["eta_min"] = df["eta_min"].astype(float)
+
+        # ✅ Filter: ignore next-bus cycle (ETA > 25 mins)
+        df = df[df["eta_min"] < 25]
+
+        # ✅ Sort to compute trend over time
+        df = df.sort_values("timestamp")
+        df["prev_eta"] = df["eta_min"].shift(1)
+        df["prev_time"] = df["timestamp"].shift(1)
+
+        # ✅ Compute realistic delay (elapsed time difference vs expected)
+        def calc_delay(row):
+            if pd.isna(row["prev_eta"]) or pd.isna(row["prev_time"]):
+                return 0
+            elapsed = (row["timestamp"] - row["prev_time"]).total_seconds() / 60
+            if elapsed > 15:  # skip new bus cycles
+                return 0
+            expected_eta = max(row["prev_eta"] - elapsed, 0)
+            delay = row["eta_min"] - expected_eta
+            return max(min(delay, 10), 0)  # clamp between 0–10 mins realistic
+
+        df["delay_min"] = df.apply(calc_delay, axis=1)
+
+        # ✅ Compute average of last readings
+        avg_delay = float(df["delay_min"].mean()) if not df.empty else 0
+        samples = len(df)
+
+        # ✅ Classify severity with refined thresholds
+        if avg_delay < 0.5:
+            status = "On time"
+        elif avg_delay < 2:
+            status = "Minor delay"
+        else:
+            status = "Severe delay"
+
+        return jsonify({
+            "stop_code": stop_code,
+            "service": service,
+            "avg_delay": round(avg_delay, 2),
+            "samples": samples,
+            "status": status
+        }), 200
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 # ==================== MAIN ====================
 if __name__ == "__main__":
     print("🚀 Initializing unified transport analytics system...")
@@ -724,6 +843,8 @@ if __name__ == "__main__":
     init_bus_db()
     load_bus_stops()
     load_bus_routes()
+
+    cleanup_old_bus_data()
     
     # Start background threads
     threading.Thread(target=background_bus_collector, daemon=True).start()
@@ -734,3 +855,4 @@ if __name__ == "__main__":
     print("🚌 Bus Dashboard: http://localhost:5000/bus")
     
     app.run(host="localhost", port=5000, debug=False, use_reloader=False)
+

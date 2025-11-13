@@ -1,0 +1,4 @@
+# *.db
+# *.db-journal
+# database/*.db
+# database/*.db-journal

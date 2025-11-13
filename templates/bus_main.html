@@ -336,7 +336,7 @@ button.refresh { grid-column: 3; justify-self: end; }
   </div>
 
   <table id="arrivalTable" class="styled-table">
-    <thead><tr><th>Bus</th><th>Next</th><th>Following</th><th>Last</th><th>Type</th></tr></thead>
+    <thead><tr><th>Bus</th><th>Next</th><th>Following</th><th>Last</th><th>Type</th><th>Delay</th></tr></thead>
     <tbody id="arrivalBody"><tr><td colspan="5"><i>Click any stop marker on the map to view arrivals.</i></td></tr></tbody>
   </table>
 
@@ -650,20 +650,74 @@ function getETA(value){
   if(value <= 10) return `<span class="bus-badge medium">${Math.round(value)} min</span>`;
   return `<span class="bus-badge late">${Math.round(value)} min</span>`;
 }
+async function loadArrivals(code, desc) {
+  activeStop = code;
+  activeStopName = desc;
 
-async function loadArrivals(code, desc){
- activeStop=code; activeStopName=desc;
- const res=await fetch(`/bus_arrivals/${code}`);
- const data=await res.json();
- const body=document.getElementById('arrivalBody');
- body.innerHTML=data.length?data.map(b=>`
-   <tr><td>${b.service}</td><td>${getETA(b.eta[0])}</td><td>${getETA(b.eta[1])}</td><td>${getETA(b.eta[2])}</td><td>${b.type||"Unknown"}</td></tr>`
- ).join(""):"<tr><td colspan='5'><i>No data available.</i></td></tr>";
- document.getElementById('lastUpdate').innerText="Last updated: "+new Date().toLocaleTimeString();
+  const res = await fetch(`/bus_arrivals/${code}`);
+  const data = await res.json();
+  const body = document.getElementById('arrivalBody');
+  body.innerHTML = "";
+
+  for (const b of data) {
+    let delayInfo = `<span class="bus-badge" style="background:#bbb;">—</span>`;
+    let delayData = null;
+    let adjustedETA = ""; // 👈 shows (~X min est.)
+
+    try {
+      // 🔹 Call delay-trend API for this stop+service
+      const delayRes = await fetch(`/api/bus_delay_trend/${code}/${b.service}`);
+      if (delayRes.ok) {
+        delayData = await delayRes.json();
+
+        if (delayData && delayData.status) {
+          const colorClass =
+            delayData.status === "Severe delay" ? "late" :
+            delayData.status === "Minor delay" ? "medium" :
+            "soon";
+
+          delayInfo = `<span class="bus-badge ${colorClass}">
+            ${delayData.status}<br>
+            <small style="font-weight:500;">(+${delayData.avg_delay.toFixed(1)} min)</small>
+          </span>`;
+        }
+
+        // 🔹 Compute adjusted ETA: adds average delay to current ETA
+        if (delayData && delayData.avg_delay && b.eta[0]) {
+          const nextETA = Math.round(b.eta[0] + delayData.avg_delay);
+          adjustedETA = `<br><small style="color:#666;">(~${nextETA} min est.)</small>`;
+        }
+      }
+    } catch (err) {
+      console.warn("Delay API failed for", b.service, err);
+    }
+
+    // 🔹 Render updated row
+    body.innerHTML += `
+      <tr>
+        <td>${b.service}</td>
+        <td>${getETA(b.eta[0])}${adjustedETA}</td>
+        <td>${getETA(b.eta[1])}</td>
+        <td>${getETA(b.eta[2])}</td>
+        <td>${b.type || "Unknown"}</td>
+        <td>${delayInfo}</td>
+      </tr>`;
+  }
+
+  // 🔹 Update timestamp once
+  document.getElementById('lastUpdate').innerText =
+    "Last updated: " + new Date().toLocaleTimeString();
 }
 
-function manualRefresh(){ if(activeStop) loadArrivals(activeStop,activeStopName); }
-setInterval(()=>{ if(activeStop) loadArrivals(activeStop,activeStopName); refreshCompare(); },60000);
+// Manual refresh and auto refresh
+function manualRefresh() {
+  if (activeStop) loadArrivals(activeStop, activeStopName);
+}
+setInterval(() => {
+  if (activeStop) loadArrivals(activeStop, activeStopName);
+  refreshCompare();
+}, 60000);
+
 
 /* FAVORITES */
 // function addFavorite(code,desc){
@@ -691,20 +745,60 @@ async function addCompare(code,desc){
   compareStops.push({code,desc});
   await renderCompareCard(code,desc);
 }
-async function renderCompareCard(code,desc){
-  const res=await fetch(`/bus_arrivals/${code}`);
-  const data=await res.json();
-  const existing=document.getElementById("cmp-"+code);
-  if(existing) existing.remove();
-  const card=document.createElement("div");
-  card.className="compare-card";
-  card.setAttribute("id","cmp-"+code);
-  card.innerHTML=`<h4>${desc}</h4>
-  <button style="background:#e74c3c;color:white;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;" onclick="removeCompare('${code}')">Remove</button>
-  <table class='styled-table'><thead><tr><th>Bus</th><th>Next</th></tr></thead>
-  <tbody>${data.map(b=>`<tr><td>${b.service}</td><td>${b.eta[0]?getETA(b.eta[0]):"-"}</td></tr>`).join("")}</tbody></table>`;
+async function renderCompareCard(code, desc) {
+  const res = await fetch(`/bus_arrivals/${code}`);
+  const data = await res.json();
+  const existing = document.getElementById("cmp-" + code);
+  if (existing) existing.remove();
+
+  const card = document.createElement("div");
+  card.className = "compare-card";
+  card.setAttribute("id", "cmp-" + code);
+
+  // Build the table rows dynamically
+  let rows = "";
+  for (const b of data) {
+    let delayStatus = "—";
+    try {
+      // Fetch delay trend from your backend
+      const delayRes = await fetch(`/api/bus_delay_trend/${code}/${b.service}`);
+      if (delayRes.ok) {
+        const delayData = await delayRes.json();
+        if (delayData && delayData.status) {
+          const color =
+            delayData.status === "Severe delay" ? "red" :
+            delayData.status === "Minor delay" ? "orange" :
+            delayData.status === "On time" ? "green" : "gray";
+          const delayValue = delayData.avg_delay ? ` (+${delayData.avg_delay.toFixed(1)} min)` : "";
+          delayStatus = `<span style="color:${color};font-weight:600;">${delayData.status}${delayValue}</span>`;
+
+        }
+      }
+    } catch (err) {
+      console.warn("Delay API failed for", b.service, err);
+    }
+
+    rows += `
+      <tr>
+        <td>${b.service}</td>
+        <td>${b.eta[0] ? getETA(b.eta[0]) : "-"}</td>
+        <td>${delayStatus}</td>
+      </tr>`;
+  }
+
+  // Render the compare card with a "Delay" column added
+  card.innerHTML = `
+    <h4>${desc}</h4>
+    <button style="background:#e74c3c;color:white;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;" 
+      onclick="removeCompare('${code}')">Remove</button>
+    <table class='styled-table'>
+      <thead><tr><th>Bus</th><th>Next</th><th>Delay</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
   document.getElementById("compareContainer").appendChild(card);
 }
+
 function removeCompare(code){
   document.getElementById("cmp-"+code)?.remove();
   compareStops=compareStops.filter(s=>s.code!==code);
@@ -737,6 +831,17 @@ function resetMap(){
   loadAllStops();
 }
 updateFavDisplay();
+
+
+async function refreshUpdateTime() {
+  const res = await fetch('/api/last_bus_update');
+  const data = await res.json();
+  document.getElementById('lastUpdate').innerText =
+    "Last updated: " + (data.last_update || "Fetching...");
+}
+refreshUpdateTime();
+setInterval(refreshUpdateTime, 60000); // refresh every 1 minute
+
 </script>
 </body>
 </div>
