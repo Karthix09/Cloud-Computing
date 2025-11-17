@@ -49,8 +49,9 @@ app.config.update(
     SESSION_COOKIE_NAME='transport_session',
     PERMANENT_SESSION_LIFETIME=timedelta(hours=24),
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
-    SESSION_COOKIE_SECURE=False  # Set True when using HTTPS
+    SESSION_COOKIE_SAMESITE='None' if IS_PRODUCTION else 'Lax',  # Changed
+    SESSION_COOKIE_SECURE=False,
+    SESSION_COOKIE_DOMAIN=None  # Add this
 )
 
 # Add ProxyFix for AWS ALB/nginx
@@ -713,4 +714,4 @@ if __name__ == "__main__":
     print("📍 Traffic Dashboard: http://localhost:5000/traffic")
     print("🚌 Bus Dashboard: http://localhost:5000/bus")
     
-    app.run(host="localhost", port=5000, debug=False, use_reloader=False)
+    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
