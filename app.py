@@ -1055,7 +1055,33 @@ def get_bus_route(service_no, bus_stop_code):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/charts")
+def chart_dashboard():
 
+    df = pd.read_csv("static/bus_delay_processed.csv")
+    df = df.fillna(0)
+
+    avg_by_hour = (
+        df.groupby("hour")["eta_minutes"].mean().reset_index().to_dict(orient="records")
+    )
+
+    median_by_service = (
+        df.groupby("service")["eta_minutes"].median().reset_index().to_dict(orient="records")
+    )
+
+    drift_by_service = (
+        df.groupby("service")["eta_change_minutes"].mean().reset_index().to_dict(orient="records")
+    )
+
+    drift_distribution = df["eta_change_minutes"].fillna(0).tolist()
+
+    return render_template(
+        "chart_dashboard.html",
+        avg_by_hour=avg_by_hour,
+        median_by_service=median_by_service,
+        drift_by_service=drift_by_service,
+        drift_distribution=drift_distribution
+    )
 
 # ==================== MAIN ====================
 if __name__ == "__main__":

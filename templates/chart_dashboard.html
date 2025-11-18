@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Bus Analytics Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f7f7f7;
+    }
+
+    .topbar {
+      background: #1A2633;
+      color: white;
+      padding: 15px 30px;
+      font-size: 22px;
+      font-weight: bold;
+    }
+
+    .container {
+      margin: 40px auto;
+      max-width: 1200px;
+    }
+
+    .chart-box {
+      background: white;
+      padding: 20px;
+      margin-bottom: 40px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+
+    h2 {
+      margin-top: 0;
+      color: #333;
+    }
+  </style>
+</head>
+
+<body>
+
+<script type="module">
+  import { createSidebar } from "/static/navbar.js";
+  createSidebar("charts");
+</script>
+
+
+<div class="topbar">
+  📈 Bus Analytics Dashboard
+</div>
+
+<div class="container">
+
+  <!-- CHART 1 -->
+  <div class="chart-box">
+    <h2>1. Average ETA by Hour</h2>
+    <div id="chart1"></div>
+  </div>
+
+  <!-- CHART 2 -->
+  <div class="chart-box">
+    <h2>2. Median ETA by Service</h2>
+    <div id="chart2"></div>
+  </div>
+
+  <!-- CHART 3 -->
+  <div class="chart-box">
+    <h2>3. Average ETA Drift by Service</h2>
+    <div id="chart3"></div>
+  </div>
+
+  <!-- CHART 4 -->
+  <div class="chart-box">
+    <h2>4. ETA Drift Distribution</h2>
+    <div id="chart4"></div>
+  </div>
+
+</div>
+
+<script>
+  // ---- Data from backend (CLEAN JINJA2) ----
+  let avgByHour = {{ avg_by_hour | safe }};
+  let medianByService = {{ median_by_service | safe }};
+  let driftByService = {{ drift_by_service | safe }};
+  let driftDistribution = {{ drift_distribution | safe }};
+
+  // ---- Chart 1 ─ Average ETA by Hour ----
+  Plotly.newPlot("chart1", [{
+      x: avgByHour.map(r => r.hour),
+      y: avgByHour.map(r => r.eta_minutes),
+      type: 'scatter',
+      mode: 'lines+markers',
+      line: { shape: 'spline' }
+  }]);
+
+  // ---- Chart 2 ─ Median ETA by Service ----
+  Plotly.newPlot("chart2", [{
+      x: medianByService.map(r => r.service),
+      y: medianByService.map(r => r.eta_minutes),
+      type: 'bar'
+  }]);
+
+  // ---- Chart 3 ─ Average Drift by Service ----
+  Plotly.newPlot("chart3", [{
+      x: driftByService.map(r => r.service),
+      y: driftByService.map(r => r.eta_change_minutes),
+      type: 'bar'
+  }]);
+
+  // ---- Chart 4 ─ Drift Histogram ----
+  Plotly.newPlot("chart4", [{
+      x: driftDistribution,
+      type: 'histogram'
+  }]);
+</script>
+
+</body>
+</html>
