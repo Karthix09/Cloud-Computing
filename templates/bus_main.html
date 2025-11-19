@@ -796,7 +796,7 @@ async function loadArrivals(code, desc){
     <tr>
       <td>
         <a href="#" 
-           onclick="showBusRoute('${b.service}', '${code}'); return false;"
+           onclick="showSingleBusRoute('${b.service}', '${code}'); return false;"
            style="color: #2d4a9d; font-weight: 600; text-decoration: underline; cursor: pointer;"
            title="Click to show route">
           ${b.service}
@@ -819,7 +819,7 @@ setInterval(()=>{ if(activeStop) loadArrivals(activeStop,activeStopName); refres
 
 
 // Function to fetch and display bus route on map with road-based routing
-async function showBusRoute(serviceNo, currentStopCode) {
+async function showSingleBusRoute(serviceNo, currentStopCode) {
   try {
     // Clear any previous routes
     clearBusRoutes();

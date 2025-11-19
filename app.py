@@ -92,6 +92,7 @@ def load_bus_stops():
 # Load bus routes
 
 
+# Loading bus routes on start-up 
 def load_bus_routes():
     conn = sqlite3.connect(BUS_DB_FILE)
     c = conn.cursor()
@@ -103,6 +104,13 @@ def load_bus_routes():
         Distance REAL
     )""")
     conn.commit()
+
+     # If data already exist in the table then skip 
+    c.execute("SELECT COUNT(*) FROM bus_routes")
+    if c.fetchone()[0] > 0:
+        conn.close()
+        print("✅ Bus routes already cached.")
+        return #exit if data exist
 
     print("📥 Loading bus routes ...")
     skip = 0
@@ -123,6 +131,7 @@ def load_bus_routes():
         if len(data) < 500:
             break
         skip += 500
+    
     conn.close()
     print("✅ Bus routes cached.")
 
@@ -800,138 +809,46 @@ def traffic_pie_chart():
 #         for r in rows
 #     ])
 
-# Bus Routes API endpoints from local database 
-# @app.route("/api/bus_route/<service_no>/<bus_stop_code>")
-# def get_bus_route(service_no, bus_stop_code):
-#     try:
-#         # ✅ Query local database instead of API
-#         conn = sqlite3.connect(BUS_DB_FILE)
-#         c = conn.cursor()
-        
-#         c.execute("""
-#             SELECT ServiceNo, Direction, StopSequence, BusStopCode, Distance 
-#             FROM bus_routes 
-#             WHERE ServiceNo = ? 
-#             ORDER BY Direction, StopSequence
-#         """, (service_no,))
-        
-#         route_rows = c.fetchall()
-#         conn.close()
-        
-#         if not route_rows:
-#             return jsonify({"error": "Route not found"}), 404
-        
-#         # Convert to dict format (same as API response)
-#         routes = []
-#         for row in route_rows:
-#             routes.append({
-#                 "ServiceNo": row[0],
-#                 "Direction": row[1],
-#                 "StopSequence": row[2],
-#                 "BusStopCode": row[3],
-#                 "Distance": row[4]
-#             })
-        
-#         # Normalize stop code
-#         bus_stop_code = str(bus_stop_code).strip()
-
-#         # Find the current bus stop
-#         current_stop_info = None
-#         for route in routes:
-#             if str(route.get("BusStopCode", "")).strip() == bus_stop_code:
-#                 current_stop_info = route
-#                 break
-        
-#         if not current_stop_info:
-#             return jsonify({"error": f"Bus stop {bus_stop_code} not found on route"}), 404
-        
-#         # Get current direction and sequence
-#         current_direction = current_stop_info.get("Direction")
-#         current_sequence = current_stop_info.get("StopSequence")
-        
-#         # Filter routes from current stop onwards
-#         filtered_routes = [
-#             route for route in routes
-#             if route.get("Direction") == current_direction 
-#             and route.get("StopSequence") >= current_sequence
-#         ]
-
-#         print(f"\n=== Bus Route Filtering Info ===")
-#         print(f"Service: {service_no}, Current Stop: {bus_stop_code}")
-#         print(f"Direction: {current_direction}, Current Sequence: {current_sequence}")
-#         print(f"Total stops for this service: {len(routes)}")
-#         print(f"Stops after filtering: {len(filtered_routes)}")
-#         print(filtered_routes)
-
-#         route_data = []
-#         not_found_stops = []
-#         conn = get_bus_db_connection()
-#         c = conn.cursor()
-
-#            # Sort by sequence
-#         route_data.sort(key=lambda x: x["sequence"])
-        
-#         if not route_data:
-#             return jsonify({"error": "No valid route data found"}), 404
-        
-#         # Return data to frontend for map rendering
-#         return jsonify({
-#             "service_no": service_no,
-#             "direction": current_direction,
-#             "current_stop": bus_stop_code,
-#             "remaining_stops": route_data,
-#             "stops_remaining": len(route_data)
-#         })
-        
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500
-
-
-# Retrieving bus route information using API pagination 
-
+# Retrieving bus route information from LOCAL DATABASE
 @app.route("/api/bus_route/<service_no>/<bus_stop_code>")
 def get_bus_route(service_no, bus_stop_code):
     """
-    Fetch bus route for a specific service number from LTA DataMall API.
+    Fetch bus route for a specific service number from LOCAL DATABASE.
     Returns route stops with coordinates in sequence.
     """
     try:
         # Normalize service number (strip whitespace, handle leading zeros)
         service_no = str(service_no).strip()
         
-        # LTA DataMall API endpoint for bus routes
-        # Fetching all routes for all bus services with pagination
-        all_routes = []
-        skip = 0
+        # ✅ FETCH FROM LOCAL DATABASE instead of API
+        conn = get_bus_db_connection()
+        c = conn.cursor()
         
-        while True:
-            r = requests.get(
-                f"{BASE_URL}/BusRoutes?$skip={skip}",
-                headers=BUS_HEADERS,
-                timeout=10
-            )
-            r.raise_for_status()
-            data = r.json()
-            
-            page_routes = data.get("value", [])
-            if not page_routes:
-                break
-            
-            # Normalize and filter routes by service number
-            for route in page_routes:
-                route_service_no = str(route.get("ServiceNo", "")).strip()
-                if route_service_no == service_no:
-                    all_routes.append(route)
-            
-            # If we got less than 500 records, we've reached the last page
-            if len(page_routes) < 500:
-                break
-            
-            skip += 500
+        # Query all routes for this service number
+        c.execute("""
+            SELECT ServiceNo, Direction, StopSequence, BusStopCode, Distance
+            FROM bus_routes
+            WHERE ServiceNo = ?
+            ORDER BY Direction, StopSequence
+        """, (service_no,))
+        
+        route_rows = c.fetchall()
+        
+        # Convert database rows to dict format (same as API response)
+        all_routes = []
+        for row in route_rows:
+            all_routes.append({
+                "ServiceNo": row[0],
+                "Direction": row[1],
+                "StopSequence": row[2],
+                "BusStopCode": row[3],
+                "Distance": row[4]
+            })
         
         print(f"Found {len(all_routes)} routes for service {service_no}")
         
         if not all_routes:
+            conn.close()
             return jsonify({"error": "Route not found"}), 404
             
         # Normalize stop code to string (remove any whitespace, ensure consistent format)
@@ -946,6 +863,7 @@ def get_bus_route(service_no, bus_stop_code):
 
         # If current stop is not found
         if not current_stop_info:
+            conn.close()
             return jsonify({"error": f"Bus stop {bus_stop_code} not found on route"}), 404
         
         # Get the current bus direction and the bus stop sequence no.
@@ -967,12 +885,9 @@ def get_bus_route(service_no, bus_stop_code):
         print(f"Direction: {current_direction}, Current Sequence: {current_sequence}")
         print(f"Total stops in full route: {len(all_routes)}")
         print(f"Stops after filtering: {len(filtered_routes)}")
-        print(filtered_routes)
 
         route_data = []
         not_found_stops = []
-        conn = get_bus_db_connection()
-        c = conn.cursor()
 
         for route in filtered_routes:
             stop_sequence = route.get("StopSequence", 0)
@@ -981,7 +896,7 @@ def get_bus_route(service_no, bus_stop_code):
             if not route_bus_stop_code:
                 continue
 
-            # Get coordinates from database
+            # Get coordinates from database (using same connection)
             c.execute(
                 "SELECT lat, lon, description, road, code FROM bus_stops WHERE code = ?",
                 (route_bus_stop_code,)
@@ -1035,7 +950,7 @@ def get_bus_route(service_no, bus_stop_code):
         if not route_data:
             return jsonify({"error": "No valid route data found"}), 404
         
-        # Return data to frontend for map rendering
+        # Return data to frontend for map rendering (SAME FORMAT)
         return jsonify({
             "service_no": service_no,
             "direction": current_direction,
@@ -1046,6 +961,165 @@ def get_bus_route(service_no, bus_stop_code):
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# # Retrieving bus route information using API pagination 
+# @app.route("/api/bus_route/<service_no>/<bus_stop_code>")
+# def get_bus_route(service_no, bus_stop_code):
+#     """
+#     Fetch bus route for a specific service number from LTA DataMall API.
+#     Returns route stops with coordinates in sequence.
+#     """
+#     try:
+#         # Normalize service number (strip whitespace, handle leading zeros)
+#         service_no = str(service_no).strip()
+        
+#         # LTA DataMall API endpoint for bus routes
+#         # Fetching all routes for all bus services with pagination
+#         all_routes = []
+#         skip = 0
+        
+#         while True:
+#             r = requests.get(
+#                 f"{BASE_URL}/BusRoutes?$skip={skip}",
+#                 headers=BUS_HEADERS,
+#                 timeout=10
+#             )
+#             r.raise_for_status()
+#             data = r.json()
+            
+#             page_routes = data.get("value", [])
+#             if not page_routes:
+#                 break
+            
+#             # Filtering routes by service number 
+#             for route in page_routes:
+#                 route_service_no = str(route.get("ServiceNo", "")).strip()
+#                 if route_service_no == service_no:
+#                     all_routes.append(route)
+            
+#             # If we got less than 500 records, we've reached the last page
+#             if len(page_routes) < 500:
+#                 break
+            
+#             skip += 500
+        
+#         print(f"Found {len(all_routes)} routes for service {service_no}")
+        
+#         if not all_routes:
+#             return jsonify({"error": "Route not found"}), 404
+            
+#         # Normalize stop code to string (remove any whitespace, ensure consistent format)
+#         bus_stop_code = str(bus_stop_code).strip()
+
+#         # Find the direction of the current bus stop 
+#         current_stop_info = None
+#         for route in all_routes:
+#             if str(route.get("BusStopCode", "")).strip() == bus_stop_code:
+#                 current_stop_info = route
+#                 break
+
+#         # If current stop is not found
+#         if not current_stop_info:
+#             return jsonify({"error": f"Bus stop {bus_stop_code} not found on route"}), 404
+        
+#         # Get the current bus direction and the bus stop sequence no.
+#         current_direction = current_stop_info.get("Direction")
+#         current_sequence = current_stop_info.get("StopSequence")
+            
+#         # The sequence of bus-stops from current stop must be greater or equal to current stop and same direction 
+#         # 1. Stops with sequence >= current Stop && direction == current stop direction 
+#         # 2. Arrange sequence in ascending order 
+#         filtered_routes = [
+#             route for route in all_routes
+#             if route.get("Direction") == current_direction 
+#             and route.get("StopSequence") >= current_sequence
+#         ]
+
+#         # Log filtering info
+#         print(f"\n=== Bus Route Filtering Info ===")
+#         print(f"Service: {service_no}, Current Stop: {bus_stop_code}")
+#         print(f"Direction: {current_direction}, Current Sequence: {current_sequence}")
+#         print(f"Total stops in full route: {len(all_routes)}")
+#         print(f"Stops after filtering: {len(filtered_routes)}")
+#         print(filtered_routes)
+
+#         route_data = []
+#         not_found_stops = []
+#         conn = get_bus_db_connection()
+#         c = conn.cursor()
+
+#         for route in filtered_routes:
+#             stop_sequence = route.get("StopSequence", 0)
+#             route_bus_stop_code = str(route.get("BusStopCode", "")).strip()
+
+#             if not route_bus_stop_code:
+#                 continue
+
+#             # Get coordinates from database
+#             c.execute(
+#                 "SELECT lat, lon, description, road, code FROM bus_stops WHERE code = ?",
+#                 (route_bus_stop_code,)
+#             )
+#             stop_info = c.fetchone()
+
+#             # Log if stop not found in database
+#             if not stop_info:
+#                 not_found_stops.append({
+#                     "stop_code": route_bus_stop_code,
+#                     "sequence": stop_sequence
+#                 })
+#                 continue
+
+#             # Add stop data to route_data if found
+#             if stop_info[0] is not None and stop_info[1] is not None:
+#                 try:
+#                     lat, lon = float(stop_info[0]), float(stop_info[1])
+#                     actual_stop_code = str(stop_info[4]) if len(stop_info) > 4 else route_bus_stop_code
+#                     route_data.append({
+#                         "sequence": stop_sequence,
+#                         "stop_code": actual_stop_code,
+#                         "lat": lat,
+#                         "lon": lon,
+#                         "description": stop_info[2] or "",
+#                         "road": stop_info[3] or "",
+#                         "distance": route.get("Distance", 0)
+#                     })
+#                 except (ValueError, TypeError, IndexError):
+#                     not_found_stops.append({
+#                         "stop_code": route_bus_stop_code,
+#                         "sequence": stop_sequence
+#                     })
+        
+#         conn.close()
+
+#         # Log stops not found in database
+#         if not_found_stops:
+#             print(f"\n⚠️  Stops NOT FOUND in database ({len(not_found_stops)}):")
+#             for stop in not_found_stops:
+#                 print(f"  - Stop Code: {stop['stop_code']}, Sequence: {stop['sequence']}")
+#         else:
+#             print(f"✓ All {len(filtered_routes)} filtered stops found in database")
+        
+#         print(f"Final route data: {len(route_data)} stops")
+#         print("=" * 40 + "\n")
+        
+#         # Sort by sequence
+#         route_data.sort(key=lambda x: x["sequence"])
+        
+#         if not route_data:
+#             return jsonify({"error": "No valid route data found"}), 404
+        
+#         # Return data to frontend for map rendering
+#         return jsonify({
+#             "service_no": service_no,
+#             "direction": current_direction,
+#             "current_stop": bus_stop_code,
+#             "remaining_stops": route_data,
+#             "stops_remaining": len(route_data)
+#         })
+        
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
 
 
 
@@ -1059,8 +1133,6 @@ if __name__ == "__main__":
         init_bus_db()
         load_bus_stops()
         load_bus_routes()
-        
-        threading.Thread(target=load_bus_stops, daemon=True).start()
         
         # Start background threads
         threading.Thread(target=background_bus_collector, daemon=True).start()
