@@ -44,7 +44,7 @@ app.register_blueprint(chatbot_bp)
 # ==================== LOGIN REQUIRED ====================
 @app.before_request
 def require_login():
-    open_paths = ("/login", "/register", "/logout", "/static/", "/favicon.ico")
+    open_paths = ("/login", "/register", "/logout", "/static/", "/favicon.ico", "/charts")
     if request.path.startswith(open_paths):
         return
     if not session.get("user_id"):
@@ -1054,6 +1054,81 @@ def get_bus_route(service_no, bus_stop_code):
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+import csv
+import os
+import pandas as pd
+from flask import Flask, render_template
+
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATASET_DIR = os.path.join(BASE_DIR, "datasets")
+
+def load_csv(filename):
+    """Loads a CSV file from /datasets."""
+    full_path = os.path.join(DATASET_DIR, filename)
+    print(f"📄 Loading: {full_path}")
+
+    if not os.path.exists(full_path):
+        raise FileNotFoundError(f"Dataset not found: {full_path}")
+
+    df = pd.read_csv(full_path)
+    return df.fillna(0)
+
+
+@app.route("/charts")
+def chart_dashboard():
+
+    print("\n============================")
+    print("🔍 ENTERED /charts ROUTE")
+    print("============================\n")
+
+    # Load datasets from /datasets
+    avg_by_hour_df = load_csv("avg_by_hour.csv")
+    median_by_service_df = load_csv("median_by_service.csv")
+    drift_by_service_df = load_csv("drift_by_service.csv")
+    top10_worst_df = load_csv("top10_worst.csv")
+
+    # ===== CHART 1 CLEANING =====
+    hourly_df = (
+        avg_by_hour_df.groupby("hour")["avg_eta"]
+        .mean()
+        .reset_index()
+        .sort_values("hour")
+    )
+
+    hourly = hourly_df.to_dict(orient="records")
+
+    # ===== CHART 2 CLEANING =====
+    median_sorted_df = (
+        median_by_service_df.sort_values("median_eta", ascending=False)
+    )
+    median_by_service = median_sorted_df.to_dict(orient="records")
+
+    # ===== CHART 3 CLEANING =====
+    drift_sorted_df = (
+        drift_by_service_df.sort_values("avg_eta_drift", ascending=False)
+    )
+    drift_by_service = drift_sorted_df.to_dict(orient="records")
+
+    # ===== CHART 4 =====
+    top10_worst = top10_worst_df.to_dict(orient="records")
+
+    # Print debug
+    print("Hourly:", hourly[:3])
+    print("Median:", median_by_service[:3])
+    print("Drift:", drift_by_service[:3])
+    print("Top10:", top10_worst[:3])
+    print("============================\n")
+
+    return render_template(
+        "chart_dashboard.html",
+        hourly=hourly,
+        median_by_service=median_by_service,
+        drift_by_service=drift_by_service,
+        top10_worst=top10_worst
+    )
+
 
 
 

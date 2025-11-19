@@ -1,7 +1,7 @@
 // static/navbar.js
 export function createSidebar(current) {
   console.log("createSidebar called with:", current);
-  
+
   const html = `
     <style>
       /* ============================
@@ -189,7 +189,10 @@ export function createSidebar(current) {
     <span>🤖</span>
     <span>AI Assistant</span>
      </a>
-      
+      <a href="/charts" class="${current === 'charts' ? 'active' : ''}">
+        <span>📊</span>
+        <span>Analytics Dashboard</span>
+      </a>
       <a href="/settings" class="${current === 'settings' ? 'active' : ''}">
         <span>⚙️</span>
         <span>Settings</span>
@@ -229,7 +232,7 @@ export function createSidebar(current) {
     hamburgerBtn.classList.toggle('open');
     sidebar.classList.toggle('open');
     overlay.classList.toggle('open');
-    
+
     // Shift content on desktop only
     if (window.innerWidth >= 768 && content) {
       content.classList.toggle('shifted');
@@ -241,7 +244,7 @@ export function createSidebar(current) {
     hamburgerBtn.addEventListener('click', toggleSidebar);
     console.log("Hamburger button listener attached");
   }
-  
+
   if (overlay) {
     overlay.addEventListener('click', toggleSidebar);
   }
