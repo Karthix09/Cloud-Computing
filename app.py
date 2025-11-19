@@ -62,7 +62,8 @@ def load_bus_stops():
     c.execute("SELECT COUNT(*) FROM bus_stops")
     if c.fetchone()[0] > 0:
         conn.close()
-        return
+        return # Exit if data exists 
+
     print("📥 Loading bus stops ...")
     skip = 0
     while True:
@@ -81,7 +82,16 @@ def load_bus_stops():
     conn.close()
     print("✅ Bus stops cached.")
 
+# 
+
+# "service_no": service_no,
+#             "direction": current_direction,
+#             "current_stop": bus_stop_code,
+#             "remaining_stops": route_data,
+#             "stops_remaining": len(route_data)
 # Load bus routes
+
+
 def load_bus_routes():
     conn = sqlite3.connect(BUS_DB_FILE)
     c = conn.cursor()
@@ -978,24 +988,6 @@ def get_bus_route(service_no, bus_stop_code):
             )
             stop_info = c.fetchone()
 
-            # # Try with padding if not found
-            # if not stop_info and len(route_bus_stop_code) < 5:
-            #     padded_code = route_bus_stop_code.zfill(5)
-            #     c.execute(
-            #         "SELECT lat, lon, description, road, code FROM bus_stops WHERE code = ?",
-            #         (padded_code,)
-            #     )
-            #     stop_info = c.fetchone()
-            
-            # # Try without leading zeros if not found
-            # if not stop_info and route_bus_stop_code.startswith('0'):
-            #     unpadded_code = route_bus_stop_code.lstrip('0') or '0'
-            #     c.execute(
-            #         "SELECT lat, lon, description, road, code FROM bus_stops WHERE code = ?",
-            #         (unpadded_code,)
-            #     )
-            #     stop_info = c.fetchone()
-
             # Log if stop not found in database
             if not stop_info:
                 not_found_stops.append({
@@ -1061,6 +1053,7 @@ def get_bus_route(service_no, bus_stop_code):
 if __name__ == "__main__":
     print("🚀 Initializing unified transport analytics system...")
     
+    # Running code asychronously (non-blocking)
     try:
         # Initialize bus module
         init_bus_db()
