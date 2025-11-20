@@ -825,6 +825,11 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
     clearBusRoutes();
     
     console.log(`Loading route for bus ${serviceNo} from stop ${currentStopCode}`);
+
+    // NEW: Fetch analytics data for this bus service
+    const analyticsResponse = await fetch(`/api/bus_analytics/${serviceNo}`);
+    const analyticsData = await analyticsResponse.json();
+    console.log('Bus analytics:', analyticsData);
     
     // Fetch route data from backend API
     const response = await fetch(`/api/bus_route/${serviceNo}/${currentStopCode}`);
@@ -836,15 +841,15 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
       return;
     }
     
-    // Validate that we have remaining stops
-    if (!routeData.remaining_stops || routeData.remaining_stops.length === 0) {
-      alert('No remaining stops found for this route.');
+    // Validate that we have the full route length and the full route
+    if (!routeData.full_route || routeData.full_route.length === 0) {
+      alert('No route data found.');
       return;
     }
     
     // Extract route information
-    const remainingStops = routeData.remaining_stops;
-    const stopsRemaining = routeData.stops_remaining || remainingStops.length;
+    const fullRoute = routeData.full_route;              // Full route
+    const stopsRemaining = routeData.stops_remaining;    // Count only
     const currentStop = routeData.current_stop;
     const direction = routeData.direction;
     
@@ -852,10 +857,10 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
     const routeCoordinates = [];
     const stopMarkers = [];
     
-    // Process each remaining stop to extract coordinates
-    remainingStops.forEach((stop, index) => {
-      const lat = parseFloat(stop.lat);
-      const lon = parseFloat(stop.lon);
+    // Process full route to extract coordinates
+    fullRoute.forEach((stop) => {
+    const lat = parseFloat(stop.lat);
+    const lon = parseFloat(stop.lon);
       
       // Validate coordinates (Singapore bounds)
       if (!isNaN(lat) && !isNaN(lon) && 
@@ -864,9 +869,9 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
         
         // Add coordinate to waypoints array
         routeCoordinates.push([lat, lon]);
-        
-        // Determine if this is the current stop (first stop in remaining_stops)
-        const isCurrentStop = (index === 0 && stop.stop_code === currentStop);
+
+         // CHANGED: Use is_current flag from backend
+         const isCurrentStop = stop.is_current;
         
         // Create marker icon based on whether it's current stop or future stop
         let markerIcon;
@@ -936,6 +941,16 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
       
       // Convert coordinates from [lon, lat] to [lat, lon] for Leaflet
       const leafletCoords = routeGeometry.map(coord => [coord[1], coord[0]]);
+
+      // Color route based on analytics status on bus reliability 
+      let routeColor = '#FF5733'; // Default orange
+      if (analyticsData.found) {
+        const drift = Math.abs(analyticsData.avg_eta_drift); // Average drift
+        if (drift >= 30) routeColor = '#dc2626';       // Critical - red
+        else if (drift >= 20) routeColor = '#ea580c';  // High - orange-red
+        else if (drift >= 10) routeColor = '#d97706';  // Medium - yellow
+        else routeColor = '#059669';                    // Stable - green
+      }
       
       // Create polyline following actual roads
       const routePolyline = L.polyline(leafletCoords, {
@@ -977,9 +992,12 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
     
     // Update current route service tracking
     currentRouteService = serviceNo;
+
+    // Pass correct first stop description
+    const firstStop = fullRoute.find(s => s.is_current, );
     
     // Create and display route information panel
-    displayRouteInfo(serviceNo, stopsRemaining, direction, remainingStops[0]?.description);
+    displayRouteInfo(serviceNo, stopsRemaining, direction, firstStop?.description || fullRoute[0]?.description, analyticsData);
     
     // Show clear route button
     const clearBtn = document.getElementById('clearRouteBtn');
@@ -1000,14 +1018,18 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
 
 
 // Helper function to display route information panel
-function displayRouteInfo(serviceNo, stopsRemaining, direction, firstStopName) {
-  // Remove existing route info panel if it exists
+function displayRouteInfo(serviceNo, stopsRemaining, direction, firstStopName, analytics = null) {
   const existingPanel = document.getElementById('routeInfoPanel');
   if (existingPanel) {
     existingPanel.remove();
   }
   
-  // Create route information panel
+  // Determine border color based on analytics status
+  let borderColor = 'var(--accent)';
+  if (analytics && analytics.found) {
+    borderColor = analytics.status_color || 'var(--accent)';
+  }
+  
   const infoPanel = document.createElement('div');
   infoPanel.id = 'routeInfoPanel';
   infoPanel.style.cssText = `
@@ -1019,9 +1041,95 @@ function displayRouteInfo(serviceNo, stopsRemaining, direction, firstStopName) {
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     padding: 16px;
     z-index: 1000;
-    min-width: 200px;
-    border: 2px solid var(--accent);
+    min-width: 280px;
+    max-width: 320px;
+    border: 2px solid ${borderColor};
+    max-height: 80vh;
+    overflow-y: auto;
   `;
+  
+  // Build analytics section HTML
+  let analyticsHTML = '';
+  if (analytics && analytics.found) {
+    analyticsHTML = `
+      <div style="
+        margin-top: 12px;
+        padding: 12px;
+        background: rgba(102, 126, 234, 0.05);
+        border-radius: 8px;
+        border: 1px solid rgba(102, 126, 234, 0.2);
+      ">
+        <div style="
+          font-size: 0.9em;
+          font-weight: bold;
+          color: var(--accent);
+          margin-bottom: 8px;
+          text-align: center;
+        ">
+          📊 Service Analytics
+        </div>
+        
+        <div style="font-size: 0.85em; color: var(--text-color); line-height: 1.6;">
+          <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+            <span>Median ETA:</span>
+            <strong>${analytics.median_eta.toFixed(1)} min</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+            <span>Avg ETA:</span>
+            <strong>${analytics.avg_eta.toFixed(1)} min</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+            <span>ETA Variability:</span>
+            <strong>${analytics.eta_variability.toFixed(2)}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+            <span>Avg Drift:</span>
+            <strong style="color: ${analytics.avg_eta_drift > 0 ? '#ef4444' : '#10b981'};">
+              ${analytics.avg_eta_drift > 0 ? '+' : ''}${analytics.avg_eta_drift.toFixed(2)} min
+            </strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+            <span>Drift Variability:</span>
+            <strong>${analytics.drift_variability.toFixed(2)}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+            <span>Avg Volatility:</span>
+            <strong>${analytics.avg_volatility.toFixed(2)} min</strong>
+          </div>
+        </div>
+        
+        <div style="
+          margin-top: 10px;
+          padding: 8px;
+          background: ${analytics.status_color}15;
+          border-radius: 6px;
+          text-align: center;
+        ">
+          <div style="
+            font-size: 0.85em;
+            color: ${analytics.status_color};
+            font-weight: bold;
+          ">
+            Status: ${analytics.status}
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    analyticsHTML = `
+      <div style="
+        margin-top: 12px;
+        padding: 10px;
+        background: #f3f4f6;
+        border-radius: 8px;
+        text-align: center;
+        font-size: 0.85em;
+        color: #666;
+      ">
+        📊 No analytics data available
+      </div>
+    `;
+  }
   
   infoPanel.innerHTML = `
     <div style="text-align: center;">
@@ -1037,6 +1145,7 @@ function displayRouteInfo(serviceNo, stopsRemaining, direction, firstStopName) {
       <div style="font-size: 0.85em; color: #666; margin-top: 8px;">
         From: ${firstStopName || 'Current Stop'}
       </div>
+      ${analyticsHTML}
     </div>
   `;
   
@@ -1061,6 +1170,12 @@ function clearBusRoutes() {
   });
   routePolylines = [];
   currentRouteService = null;
+  
+  // Remove route info panel
+  const panel = document.getElementById('routeInfoPanel');
+  if (panel) {
+    panel.remove();
+  }
 
   // Hide clear button
   document.getElementById('clearRouteBtn').style.display = 'none';

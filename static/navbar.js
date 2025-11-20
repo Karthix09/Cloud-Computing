@@ -173,30 +173,33 @@ export function createSidebar(current) {
 
     <!-- Sidebar -->
     <nav class="app-sidebar" id="appSidebar">
-      <h2>🚀 Transport Analytics</h2>
+      <h2>Transport Analytics</h2>
       
           <a href="/bus" class="${current === 'bus' ? 'active' : ''}">
-        <span>🚌</span>
+        <span></span>
         <span>Bus Dashboard</span>
       </a>
 
       <a href="/traffic" class="${current === 'traffic' ? 'active' : ''}">
-        <span>🚧</span>
+        <span></span>
         <span>Traffic Dashboard</span>
       </a>
 
      <a href="/chatbot" class="${current === 'chatbot' ? 'active' : ''}">
-    <span>🤖</span>
+    <span></span>
     <span>AI Assistant</span>
      </a>
-      
+      <a href="/charts" class="${current === 'charts' ? 'active' : ''}">
+        <span></span>
+        <span>Analytics Dashboard</span>
+      </a>
       <a href="/settings" class="${current === 'settings' ? 'active' : ''}">
-        <span>⚙️</span>
+        <span></span>
         <span>Settings</span>
       </a>
       
       <a href="/logout">
-        <span>🚪</span>
+        <span></span>
         <span>Logout</span>
       </a>
 
