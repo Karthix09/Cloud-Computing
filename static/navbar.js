@@ -189,10 +189,10 @@ export function createSidebar(current) {
     <span></span>
     <span>AI Assistant</span>
      </a>
-      <a href="/charts" class="${current === 'charts' ? 'active' : ''}">
+      <!-- <a href="/charts" class="${current === 'charts' ? 'active' : ''}">
         <span></span>
         <span>Analytics Dashboard</span>
-      </a>
+      </a> -->
       <a href="/settings" class="${current === 'settings' ? 'active' : ''}">
         <span></span>
         <span>Settings</span>
