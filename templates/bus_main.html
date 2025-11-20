@@ -468,35 +468,44 @@ async function calculateRoute() {
 
   if (data.routes && data.routes.length) {
     routeContainer.innerHTML = data.routes.map((r, i) => {
-      if (r.transfer) {
-        // Multi-bus transfer route display
-        const legsHTML = r.legs.map((leg, j) => `
-          <li>Take Bus <b>${leg.service}</b> from <b>${leg.from}</b> → <b>${leg.to}</b> (${leg.stops} stops)</li>
+        
+        const firstLeg = r.legs[0];
+        
+        // Single bus = 1 leg
+        if (r.legs.length === 1) {
+            return `
+                <div class="compare-card">
+                    <h4>Option ${i + 1}: Bus ${firstLeg.service}</h4>
+                    <p>Stops: ${firstLeg.stops}</p>
+                    <p>Estimated Time: <b>${r.estimated_time_min} min</b></p>
+                    <button class="btn-map"
+                      onclick="drawRoute('${firstLeg.service}', '${firstLeg.from}', '${firstLeg.to}', ${firstLeg.direction})">
+                      Show on Map
+                    </button>
+                </div>
+            `;
+        }
+
+        // Multi-leg route
+        const legsHTML = r.legs.map(leg => `
+            <li>Take Bus <b>${leg.service}</b> from <b>${leg.from}</b> → <b>${leg.to}</b> (${leg.stops} stops)</li>
         `).join("");
+
         return `
-          <div class="compare-card">
-            <h4>Option ${i + 1}: ${r.legs.length} Buses (Transfer)</h4>
-            <ul style="text-align:left; margin:0 0 10px 0; padding-left:18px;">${legsHTML}</ul>
-            <p><b>Total Estimated Time:</b> ${r.estimated_time_min} min</p>
-            <button class="btn-map" onclick='drawMultiRoute(${JSON.stringify(r.legs)})'>Show on Map</button>
-          </div>
+            <div class="compare-card">
+                <h4>Option ${i + 1}: ${r.legs.length} Buses (Transfer)</h4>
+                <ul style="text-align:left; margin:0 0 10px 0; padding-left:18px;">
+                    ${legsHTML}
+                </ul>
+                <p><b>Total Estimated Time:</b> ${r.estimated_time_min} min</p>
+                <button class="btn-map" onclick='drawMultiRoute(${JSON.stringify(r.legs)})'>
+                    Show on Map
+                </button>
+            </div>
         `;
-      } else {
-        // Single direct route display
-        return `
-          <div class="compare-card">
-            <h4>Option ${i + 1}: Bus ${r.service}</h4>
-            <p>Stops: ${r.stops}</p>
-            <p>Estimated Time: <b>${r.estimated_time_min} min</b></p>
-            <button class="btn-map" onclick="drawRoute('${r.service}', '${origin}', '${destination}', ${r.direction})">
-              Show on Map
-            </button>
-          </div>
-        `;
-      }
     }).join("");
   } else {
-    routeContainer.innerHTML = "<p>No route found.</p>";
+      routeContainer.innerHTML = "<p>No route found.</p>";
   }
 }
 
@@ -751,14 +760,14 @@ async function loadAllStops(){
 
 
  // Handle marker click event to set the active input field
- function handleMarkerClick(busStopCode, busStopDesc) {
+ function handleMarkerClick(busStopCode) {
      if (activeInputField === 'origin') {
-       document.getElementById("origin").value = busStopCode + " - " + busStopDesc;
+       document.getElementById("origin").value = busStopCode;
      } else if (activeInputField === 'destination') {
-       document.getElementById("destination").value = busStopCode + " - " + busStopDesc;
+       document.getElementById("destination").value = busStopCode;
      } else {
        // Default to origin if neither is focused
-       document.getElementById("origin").value = busStopCode + " - " + busStopDesc;
+       document.getElementById("origin").value = busStopCode;
        activeInputField = 'origin';
      }
    }

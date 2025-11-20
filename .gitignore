@@ -2,3 +2,31 @@
 database/
 *.db
 database/
+
+# Virtual Environments (NEVER COMMIT THESE!)
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Databases
+*.db
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+
+# Environment variables
+.env
+.flaskenv
+
+# Ignoring the M2-big data folder
+/folder_name/
