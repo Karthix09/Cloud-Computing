@@ -1288,7 +1288,7 @@ if __name__ == "__main__":
         bus_routes_by_service = build_bus_routes_cache()
         ROUTE_GRAPH = build_route_graph_from_cache(bus_routes_by_service)
 
-        threading.Thread(target=load_bus_stops, daemon=True).start()
+        # threading.Thread(target=load_bus_stops, daemon=True).start()
         
         # Start background threads
         threading.Thread(target=background_bus_collector, daemon=True).start()
@@ -1297,7 +1297,7 @@ if __name__ == "__main__":
         print("🌐 Running unified app at http://localhost:5000")
         print("📍 Traffic Dashboard: http://localhost:5000/traffic")
         print("🚌 Bus Dashboard: http://localhost:5000/bus")
-        print("💡 If the page doesn't load, check that port 5000 is available")
+        print("💡 If the Fpage doesn't load, check that port 5000 is available")
         
         app.run(host="127.0.0.1", port=5000, debug=True, use_reloader=False)
     except OSError as e:
