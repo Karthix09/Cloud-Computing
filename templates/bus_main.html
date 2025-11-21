@@ -936,9 +936,9 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
     //Manual OSRM API Call (More Control)
     // ========================================
     
-    // Build OSRM API request URL with all waypoints
+    // OSRM API request URL with all waypoints
     const coords = routeCoordinates.map(c => `${c[1]},${c[0]}`).join(';');
-    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`; //API call for OSRM 
     
     // Fetch route geometry from OSRM
     const osrmResponse = await fetch(osrmUrl);
@@ -1179,7 +1179,7 @@ function clearBusRoutes() {
   });
   routePolylines = [];
   currentRouteService = null;
-  
+
   // Remove route info panel
   const panel = document.getElementById('routeInfoPanel');
   if (panel) {

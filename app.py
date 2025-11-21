@@ -537,7 +537,7 @@ def dijkstra_multi_wrapper(origin, destination):
     routes = direct + dijkstra_results
 
     # ---- Now normalize routes (same as earlier fix) ----
-    normalized = []
+    normalized = [] 
 
     for r in routes:
         if "legs" in r:
@@ -1278,7 +1278,7 @@ def get_bus_route(service_no, bus_stop_code):
 if __name__ == "__main__":
     print("🚀 Initializing unified transport analytics system...")
     
-    # Running code sychronously (blocking) 
+    # Running code sychronously 
     try:
         # Initialize bus module
         init_bus_db()
