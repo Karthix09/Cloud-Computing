@@ -42,13 +42,13 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(chatbot_bp)
 
 # ==================== LOGIN REQUIRED ====================
-@app.before_request
-def require_login():
-    open_paths = ("/login", "/register", "/logout", "/static/", "/favicon.ico")
-    if request.path.startswith(open_paths):
-        return
-    if not session.get("user_id"):
-        return redirect(url_for("auth.login"))
+# @app.before_request
+# def require_login():
+#     open_paths = ("/login", "/register", "/logout", "/static/", "/favicon.ico")
+#     if request.path.startswith(open_paths):
+#         return
+#     if not session.get("user_id"):
+#         return redirect(url_for("auth.login"))
 
 # ==================== BUS MODULE ====================
 
