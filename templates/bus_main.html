@@ -417,7 +417,7 @@ let activeStop="", activeStopName="";
 let favoriteStops = JSON.parse(localStorage.getItem("favorites") || "[]");
 let compareStops = [];
 let savedLocationMarkers = []; // Array to store saved location markers
-let activeInput = 'origin'; // Track which input field is active (origin or destination)
+let activeInputField = 'origin'; // Track which input field is active (origin or destination)
 
 // Pressing Enter in the search box triggers the Search button
 document.getElementById("query").addEventListener("keypress", function (event) {
@@ -580,9 +580,13 @@ function resetRoute() {
   document.getElementById("origin").value = "";
   document.getElementById("destination").value = "";
 
-  // Clear route results display
-  const container = document.getElementById("compareContainer");
-  if (container) container.innerHTML = "";
+  // Clear fastest route cards
+  const routeContainer = document.getElementById("routeContainer");
+  if (routeContainer) routeContainer.innerHTML = "";
+
+  // (Optional) leave compare cards alone, or clear them too if you want:
+  // const compareContainer = document.getElementById("compareContainer");
+  // if (compareContainer) compareContainer.innerHTML = "";
 
   // Remove any drawn route line (polyline or routing control)
   if (window.drawnRoute) {
@@ -595,7 +599,7 @@ function resetRoute() {
     window.routeControl = null;
   }
 
-  // Optional: reset map view to Singapore default (like your main reset button)
+  // Reset map view
   map.setView([1.3521, 103.8198], 12);
 }
 

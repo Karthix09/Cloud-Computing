@@ -1285,6 +1285,9 @@ if __name__ == "__main__":
         load_bus_stops()
         load_bus_routes()
         
+        bus_routes_by_service = build_bus_routes_cache()
+        ROUTE_GRAPH = build_route_graph_from_cache(bus_routes_by_service)
+
         threading.Thread(target=load_bus_stops, daemon=True).start()
         
         # Start background threads
