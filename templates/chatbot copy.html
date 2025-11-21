@@ -2,23 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Transport Buddy – AI Assistant</title>
+    <title>Transport Buddy - Bus Arrival Chatbot</title>
 
-    <!-- =======================
-         Chatbot CSS
-    ========================== -->
     <style>
-    body {
-        margin: 0;
-        padding: 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    }
-
-    .content {
-        padding: 0;
-        background: #f5f5f5;
-    }
-
     .chatbot-container {
         max-width: 800px;
         margin: 20px auto;
@@ -68,18 +54,24 @@
     }
 
     @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to   { opacity: 1; transform: translateY(0); }
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 
-    .bot-message-container { 
-        display: flex; 
-        justify-content: flex-start; 
+    .bot-message-container {
+        display: flex;
+        justify-content: flex-start;
     }
-    
-    .user-message-container { 
-        display: flex; 
-        justify-content: flex-end; 
+
+    .user-message-container {
+        display: flex;
+        justify-content: flex-end;
     }
 
     .bot-message {
@@ -103,7 +95,6 @@
         margin: 5px 0;
     }
 
-    /* Bus Stop Cards */
     .bus-stop-card {
         background: white;
         border: 1px solid #e0e0e0;
@@ -135,7 +126,6 @@
         font-size: 12px;
     }
 
-    /* Bus Arrival Cards */
     .bus-arrival-card {
         background: white;
         border-left: 4px solid #667eea;
@@ -256,8 +246,8 @@
         transition: border-color 0.2s ease;
     }
 
-    .chatbot-input:focus { 
-        border-color: #667eea; 
+    .chatbot-input:focus {
+        border-color: #667eea;
     }
 
     .btn-send {
@@ -273,7 +263,7 @@
         box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
     }
 
-    .btn-send:hover { 
+    .btn-send:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
     }
@@ -307,17 +297,16 @@
     }
 
     @keyframes typing {
-        0%, 60%, 100% { 
-            transform: translateY(0); 
-            opacity: 0.5; 
+        0%, 60%, 100% {
+            transform: translateY(0);
+            opacity: 0.5;
         }
-        30% { 
-            transform: translateY(-10px); 
-            opacity: 1; 
+        30% {
+            transform: translateY(-10px);
+            opacity: 1;
         }
     }
 
-    /* Mobile responsive */
     @media (max-width: 768px) {
         .chatbot-container {
             margin: 10px;
@@ -334,7 +323,6 @@
         }
     }
 
-    /* Scrollbar styling */
     .chatbot-messages::-webkit-scrollbar {
         width: 6px;
     }
@@ -353,65 +341,55 @@
     }
     </style>
 </head>
-
 <body>
-
-    <!-- ========================
-         HAMBURGER SIDEBAR
-         (navbar.js injection)
-    ========================= -->
-    <script type="module">
-        import { createSidebar } from "/static/navbar.js";
-        createSidebar("assistant");   /* highlight correct tab */
-    </script>
-
-    <!-- Everything shifts right when sidebar opens -->
-    <div class="content">
-
-        <div class="chatbot-container">
-
-            <div class="chatbot-header">
-                <h2>Transport Buddy</h2>
-                <p class="subtitle">Your Singapore Bus Arrival Assistant</p>
-            </div>
-
-            <div class="chatbot-messages" id="chatMessages">
-                <div class="bot-message-container">
-                    <div class="message-bubble bot-message">
-                        <p>Hello! I'm Transport Buddy. I can help you with:</p>
-                        <ul>
-                            <li>Finding bus stops near you</li>
-                            <li>Checking real-time bus arrivals</li>
-                            <li>Searching for specific bus services</li>
-                        </ul>
-                        <p>Try asking: <b>"Bus at Clementi"</b> or <b>"When is bus 184 coming?"</b></p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="chatbot-input-area">
-
-                <div class="quick-actions">
-                    <button class="btn-quick-action" id="btnNearby">Find Nearby Stops</button>
-                </div>
-
-                <div class="input-group">
-                    <input type="text" id="userInput" class="chatbot-input" placeholder="Type your message…" autocomplete="off">
-                    <button class="btn-send" id="btnSend">Send</button>
-                </div>
-            </div>
-
-            <div class="typing-indicator" id="typingIndicator" style="display:none;">
-                <span></span><span></span><span></span>
-            </div>
-
+    <div class="chatbot-container">
+        <div class="chatbot-header">
+            <h2>Transport Buddy</h2>
+            <p class="subtitle">Your Singapore Bus Arrival Assistant</p>
         </div>
+        
+        <div class="chatbot-messages" id="chatMessages">
+            <div class="bot-message-container">
+                <div class="message-bubble bot-message">
+                    <p>Hello! I'm Transport Buddy. I can help you with:</p>
+                    <ul>
+                        <li>Finding bus stops near you</li>
+                        <li>Checking real-time bus arrivals</li>
+                        <li>Searching for specific bus services</li>
+                    </ul>
+                    <p>Try asking: "Bus at Clementi" or "When is bus 184 coming?"</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chatbot-input-area">
+            <div class="quick-actions">
+                <button class="btn-quick-action" id="btnNearby">
+                    <span>Find Nearby Stops</span>
+                </button>
+            </div>
+            
+            <div class="input-group">
+                <input 
+                    type="text" 
+                    id="userInput" 
+                    class="chatbot-input" 
+                    placeholder="Type your message here..."
+                    autocomplete="off"
+                >
+                <button class="btn-send" id="btnSend">
+                    <span>Send</span>
+                </button>
+            </div>
+        </div>
+        
+        <div class="typing-indicator" id="typingIndicator" style="display: none;">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </div>
 
-    </div> <!-- end content container -->
-
-    <!-- ============================
-         Chatbot JS
-    ============================ -->
     <script>
     class TransportBuddyChatbot {
         constructor() {
@@ -421,9 +399,10 @@
             this.btnNearby = document.getElementById('btnNearby');
             this.typingIndicator = document.getElementById('typingIndicator');
             this.sessionId = this.generateSessionId();
+            
             this.init();
         }
-
+        
         init() {
             this.btnSend.addEventListener('click', () => this.sendMessage());
             this.userInput.addEventListener('keypress', (e) => {
@@ -432,19 +411,18 @@
             this.btnNearby.addEventListener('click', () => this.getNearbyStops());
             this.scrollToBottom();
         }
-
+        
         generateSessionId() {
             return 'session-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
         }
-
+        
         async sendMessage() {
             const message = this.userInput.value.trim();
             if (!message) return;
-
             this.addMessage(message, 'user');
             this.userInput.value = '';
             this.showTyping();
-
+            
             try {
                 const response = await fetch('/api/chatbot/send-message', {
                     method: 'POST',
@@ -454,158 +432,136 @@
                         sessionId: this.sessionId
                     })
                 });
-
+                
                 const data = await response.json();
                 this.hideTyping();
-
+                
                 if (data.error) {
                     this.addMessage(data.error, 'bot');
                     return;
                 }
-
-                if (data.messages?.length) {
-                    data.messages.forEach(msg => this.addMessage(msg.content, 'bot'));
+                
+                if (data.messages && data.messages.length > 0) {
+                    data.messages.forEach(msg => {
+                        this.addMessage(msg.content, 'bot');
+                    });
                 }
-
+                
                 if (data.data) {
                     this.renderStructuredData(data.data);
                 }
-
+                
             } catch (error) {
                 this.hideTyping();
-                this.addMessage('Sorry, something went wrong. Try again.', 'bot');
+                this.addMessage('Sorry, I encountered an error. Please try again.', 'bot');
                 console.error('Error:', error);
             }
         }
-
+        
         addMessage(text, sender) {
-            const wrapper = document.createElement('div');
-            wrapper.className = sender === 'user'
-                ? 'user-message-container'
-                : 'bot-message-container';
-
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `${sender}-message-container`;
+            
             const bubble = document.createElement('div');
-            bubble.className = sender === 'user'
-                ? 'message-bubble user-message'
-                : 'message-bubble bot-message';
-
-            bubble.innerHTML = text.replace(/\n/g, "<br>");
-            wrapper.appendChild(bubble);
-            this.messagesContainer.appendChild(wrapper);
-            this.scrollToBottom();
-        }
-
-        scrollToBottom() {
-            setTimeout(() => {
-                this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
-            }, 100);
-        }
-
-        showTyping() { 
-            this.typingIndicator.style.display = 'flex';
+            bubble.className = `message-bubble ${sender}-message`;
+            bubble.innerHTML = this.formatMessage(text);
+            
+            messageDiv.appendChild(bubble);
+            this.messagesContainer.appendChild(messageDiv);
             this.scrollToBottom();
         }
         
-        hideTyping() { 
-            this.typingIndicator.style.display = 'none'; 
+        formatMessage(text) {
+            return text.replace(/\n/g, '<br>');
         }
-
+        
         renderStructuredData(data) {
-            if (data.type === "nearby_stops" || data.type === "multiple_stops") {
+            const type = data.type;
+            if (type === 'multiple_stops' || type === 'nearby_stops') {
                 this.renderBusStops(data.stops);
-            }
-            else if (data.type === "arrivals") {
+            } else if (type === 'arrivals') {
                 this.renderBusArrivals(data);
             }
         }
-
+        
         renderBusStops(stops) {
-            const wrapper = document.createElement("div");
-            wrapper.className = "bot-message-container";
-
-            const bubble = document.createElement("div");
-            bubble.className = "message-bubble bot-message";
-
+            const container = document.createElement('div');
+            container.className = 'bot-message-container';
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble bot-message';
+            
             stops.forEach(stop => {
-                const card = document.createElement("div");
-                card.className = "bus-stop-card";
+                const card = document.createElement('div');
+                card.className = 'bus-stop-card';
                 card.onclick = () => this.getBusArrivals(stop.code);
-
-                card.innerHTML = `
+                
+                let html = `
                     <div class="bus-stop-code">${stop.code}</div>
                     <div class="bus-stop-name">${stop.description}</div>
-                    ${stop.distance ? `<div class="bus-stop-distance">${stop.distance}m away</div>` : ""}
                 `;
+                
+                if (stop.distance !== undefined) {
+                    html += `<div class="bus-stop-distance">${stop.distance}m away</div>`;
+                }
+                
+                card.innerHTML = html;
                 bubble.appendChild(card);
             });
-
-            wrapper.appendChild(bubble);
-            this.messagesContainer.appendChild(wrapper);
+            
+            container.appendChild(bubble);
+            this.messagesContainer.appendChild(container);
             this.scrollToBottom();
         }
-
-        async getBusArrivals(code) {
-            this.showTyping();
-            try {
-                const res = await fetch(`/api/chatbot/arrivals/${code}?sessionId=${this.sessionId}`);
-                const data = await res.json();
-                this.hideTyping();
-
-                if (data.error) {
-                    this.addMessage(data.error, "bot");
-                    return;
-                }
-
-                this.renderBusArrivals(data);
-
-            } catch (err) {
-                this.hideTyping();
-                this.addMessage("Error fetching arrivals.", "bot");
-                console.error('Error:', err);
-            }
-        }
-
+        
         renderBusArrivals(data) {
             const arrivals = data.arrivals;
-            if (!arrivals?.services?.length) {
-                this.addMessage(arrivals?.message || "No buses available.", "bot");
+            
+            if (!arrivals.services || arrivals.services.length === 0) {
+                this.addMessage(arrivals.message || 'No buses available at this stop.', 'bot');
                 return;
             }
-
-            const wrapper = document.createElement("div");
-            wrapper.className = "bot-message-container";
-
-            const bubble = document.createElement("div");
-            bubble.className = "message-bubble bot-message";
-
+            
+            const container = document.createElement('div');
+            container.className = 'bot-message-container';
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble bot-message';
+            
             arrivals.services.forEach(service => {
-                const card = document.createElement("div");
-                card.className = "bus-arrival-card";
-
+                const card = document.createElement('div');
+                card.className = 'bus-arrival-card';
+                
                 let html = `<div class="service-number">Service ${service.service_no}</div>`;
-
-                service.buses.forEach(bus => {
-                    let minutes = bus.minutes_away;
-                    let timingClass = "timing-later";
+                
+                service.buses.forEach((bus) => {
+                    const minutes = bus.minutes_away;
+                    let timingClass = 'timing-later';
                     let timingText = `${minutes} min`;
-
+                    
                     if (minutes <= 1) {
-                        timingClass = "timing-arriving";
-                        timingText = "Arriving";
+                        timingClass = 'timing-arriving';
+                        timingText = 'Arriving';
                     } else if (minutes <= 5) {
-                        timingClass = "timing-soon";
+                        timingClass = 'timing-soon';
                     }
-
-                    let loadMap = {
-                        SEA: ["load-sea", "Seats Available"],
-                        SDA: ["load-sda", "Standing Available"],
-                        LSD: ["load-lsd", "Limited Standing"]
-                    };
-                    let [loadClass, loadText] = loadMap[bus.load] || loadMap["SEA"];
-
-                    let typeMap = { SD: "Single Deck", DD: "Double Deck", BD: "Bendy" };
-                    let busTypeText = typeMap[bus.type] || "";
-
+                    
+                    let loadClass = 'load-sea';
+                    let loadText = 'Seats Available';
+                    
+                    if (bus.load === 'SDA') {
+                        loadClass = 'load-sda';
+                        loadText = 'Standing Available';
+                    } else if (bus.load === 'LSD') {
+                        loadClass = 'load-lsd';
+                        loadText = 'Limited Standing';
+                    }
+                    
+                    let busTypeText = '';
+                    if (bus.type === 'SD') busTypeText = 'Single Deck';
+                    else if (bus.type === 'DD') busTypeText = 'Double Deck';
+                    else if (bus.type === 'BD') busTypeText = 'Bendy';
+                    
                     html += `
                         <div class="bus-timing">
                             <span class="timing-badge ${timingClass}">${timingText}</span>
@@ -614,66 +570,112 @@
                         </div>
                     `;
                 });
-
+                
                 card.innerHTML = html;
                 bubble.appendChild(card);
             });
-
-            wrapper.appendChild(bubble);
-            this.messagesContainer.appendChild(wrapper);
+            
+            container.appendChild(bubble);
+            this.messagesContainer.appendChild(container);
             this.scrollToBottom();
         }
-
+        
+        async getBusArrivals(busStopCode) {
+            this.showTyping();
+            
+            try {
+                const response = await fetch(`/api/chatbot/arrivals/${busStopCode}?sessionId=${this.sessionId}`);
+                const data = await response.json();
+                
+                this.hideTyping();
+                
+                if (data.error) {
+                    this.addMessage(data.error, 'bot');
+                    return;
+                }
+                
+                this.renderBusArrivals(data);
+                
+            } catch (error) {
+                this.hideTyping();
+                this.addMessage('Sorry, I could not get the bus arrivals. Please try again.', 'bot');
+                console.error('Error:', error);
+            }
+        }
+        
         async getNearbyStops() {
             if (!navigator.geolocation) {
-                this.addMessage("Geolocation not supported.", "bot");
+                this.addMessage('Geolocation is not supported by your browser.', 'bot');
                 return;
             }
-            this.addMessage("Getting your location…", "bot");
+            
+            this.addMessage('Getting your location...', 'bot');
             this.showTyping();
-
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                try {
-                    const res = await fetch('/api/chatbot/nearby-stops', {
-                        method: "POST",
-                        headers: {"Content-Type": "application/json"},
-                        body: JSON.stringify({
-                            latitude: pos.coords.latitude,
-                            longitude: pos.coords.longitude,
-                            sessionId: this.sessionId
-                        })
-                    });
-
-                    const data = await res.json();
-                    this.hideTyping();
-
-                    if (data.error) {
-                        this.addMessage(data.error, "bot");
-                        return;
+            
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const latitude = position.coords.latitude;
+                    const longitude = position.coords.longitude;
+                    
+                    try {
+                        const response = await fetch('/api/chatbot/nearby-stops', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                latitude: latitude,
+                                longitude: longitude,
+                                sessionId: this.sessionId
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        this.hideTyping();
+                        
+                        if (data.error) {
+                            this.addMessage(data.error, 'bot');
+                            return;
+                        }
+                        
+                        if (data.type === 'nearby_stops') {
+                            this.addMessage(`Found ${data.stops.length} bus stops near you:`, 'bot');
+                            this.renderBusStops(data.stops);
+                        }
+                        
+                    } catch (error) {
+                        this.hideTyping();
+                        this.addMessage('Sorry, I could not find nearby stops. Please try again.', 'bot');
+                        console.error('Error:', error);
                     }
-
-                    if (data.type === 'nearby_stops') {
-                        this.addMessage(`Found ${data.stops.length} nearby stops:`, "bot");
-                        this.renderBusStops(data.stops);
-                    }
-
-                } catch (err) {
+                },
+                (error) => {
                     this.hideTyping();
-                    this.addMessage("Unable to load nearby stops.", "bot");
-                    console.error('Error:', err);
+                    this.addMessage('Unable to get your location. Please enable location services.', 'bot');
+                    console.error('Geolocation error:', error);
                 }
-            },
-            () => {
-                this.hideTyping();
-                this.addMessage("Location access denied.", "bot");
-            });
+            );
+        }
+        
+        showTyping() {
+            this.typingIndicator.style.display = 'flex';
+            this.scrollToBottom();
+        }
+        
+        hideTyping() {
+            this.typingIndicator.style.display = 'none';
+        }
+        
+        scrollToBottom() {
+            setTimeout(() => {
+                this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+            }, 100);
         }
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener('DOMContentLoaded', () => {
         new TransportBuddyChatbot();
     });
     </script>
-
 </body>
 </html>
