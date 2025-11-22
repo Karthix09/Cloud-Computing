@@ -20,15 +20,15 @@ def get_db_connection():
         conn = psycopg2.connect(
             host=os.getenv('DB_HOST'),
             port=int(os.getenv('DB_PORT', 5432)),
-            database=os.getenv('DB_NAME', 'transport_analytics'),
-            user=os.getenv('DB_USER', 'dbadmin'),
+            database=os.getenv('DB_NAME', 'transport_db'),
+            user=os.getenv('DB_USER', 'postgres'),
             password=os.getenv('DB_PASSWORD'),
             cursor_factory=RealDictCursor
         )
         print("✅ Connected to PostgreSQL (Production)")
     else:
         # SQLite connection for local development
-        conn = sqlite3.connect("users.db")
+        conn = sqlite3.connect("database/users.db")
         conn.row_factory = sqlite3.Row
         print("✅ Connected to SQLite (Development)")
     
@@ -37,19 +37,33 @@ def get_db_connection():
 
 def get_bus_db_connection():
     """
-    Get SQLite connection for BUS CACHE data.
-    This is ALWAYS SQLite, even in production (hybrid architecture).
-    Each EC2 instance maintains its own local bus cache.
+    Get database connection for BUS DATA.
+    - Production: PostgreSQL RDS (use existing bus_stops and bus_arrivals tables)
+    - Development: SQLite local cache
     """
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    BUS_DB_FILE = os.path.join(BASE_DIR, "database/bus_data.db")
-    
-    # Ensure database directory exists
-    os.makedirs(os.path.dirname(BUS_DB_FILE), exist_ok=True)
-    
-    conn = sqlite3.connect(BUS_DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if IS_PRODUCTION:
+        # Use PostgreSQL for bus data in production
+        conn = psycopg2.connect(
+            host=os.getenv('DB_HOST'),
+            port=int(os.getenv('DB_PORT', 5432)),
+            database=os.getenv('DB_NAME', 'transport_db'),
+            user=os.getenv('DB_USER', 'postgres'),
+            password=os.getenv('DB_PASSWORD'),
+            cursor_factory=RealDictCursor
+        )
+        print("✅ Connected to PostgreSQL for bus data (Production)")
+        return conn
+    else:
+        # SQLite for local development
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        BUS_DB_FILE = os.path.join(BASE_DIR, "database/bus_data.db")
+        
+        # Ensure database directory exists
+        os.makedirs(os.path.dirname(BUS_DB_FILE), exist_ok=True)
+        
+        conn = sqlite3.connect(BUS_DB_FILE)
+        conn.row_factory = sqlite3.Row
+        return conn
 
 
 def init_users_db():
@@ -152,41 +166,80 @@ def init_users_db():
 
 def init_bus_db():
     """
-    Initialize BUS CACHE database tables (SQLite only).
-    This runs on both local and production environments.
-    Each EC2 instance will have its own local bus cache.
+    Initialize BUS database tables.
+    In production, this uses your EXISTING PostgreSQL tables.
+    In development, creates local SQLite tables.
     """
     conn = get_bus_db_connection()
     cursor = conn.cursor()
     
-    # Bus stops table
-    cursor.execute("""CREATE TABLE IF NOT EXISTS bus_stops(
-        code TEXT PRIMARY KEY, 
-        description TEXT, 
-        road TEXT, 
-        lat REAL, 
-        lon REAL
-    )""")
+    if IS_PRODUCTION:
+        # PostgreSQL - Create missing tables only
+        # bus_stops and bus_arrivals already exist in your RDS
+        
+        # Create bus_routes table (needed for route planning)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bus_routes (
+                ServiceNo VARCHAR(10),
+                Direction INTEGER,
+                StopSequence INTEGER,
+                BusStopCode VARCHAR(10),
+                Distance DECIMAL(10, 2)
+            )
+        """)
+        
+        # Create index for bus_routes
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_bus_routes_service 
+            ON bus_routes(ServiceNo, Direction, StopSequence)
+        """)
+        
+        # Create traffic incidents table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS incidents (
+                Id VARCHAR(255) PRIMARY KEY,
+                Type VARCHAR(100),
+                Latitude DOUBLE PRECISION,
+                Longitude DOUBLE PRECISION,
+                Message TEXT,
+                FetchedAt TIMESTAMP
+            )
+        """)
+        
+        conn.commit()
+        print("✅ PostgreSQL bus tables initialized (using existing bus_stops and bus_arrivals)")
+        
+    else:
+        # SQLite for local development
+        cursor.execute("""CREATE TABLE IF NOT EXISTS bus_stops(
+            code TEXT PRIMARY KEY, 
+            description TEXT, 
+            road TEXT, 
+            lat REAL, 
+            lon REAL
+        )""")
+        
+        cursor.execute("""CREATE TABLE IF NOT EXISTS bus_arrivals(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            stop_code TEXT,
+            service TEXT,
+            eta_min REAL,
+            bus_type TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )""")
+        
+        cursor.execute("""CREATE TABLE IF NOT EXISTS bus_routes(
+            ServiceNo TEXT,
+            Direction INTEGER,
+            StopSequence INTEGER,
+            BusStopCode TEXT,
+            Distance REAL
+        )""")
+        
+        conn.commit()
+        print("✅ SQLite bus tables initialized")
     
-    # Bus routes table
-    # cursor.execute("""CREATE TABLE IF NOT EXISTS bus_routes(
-    #     service TEXT, 
-    #     stop_code TEXT
-    # )""")
-    
-    # Bus arrivals table (for historical data)
-    cursor.execute("""CREATE TABLE IF NOT EXISTS bus_arrivals(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        stop_code TEXT,
-        service TEXT,
-        eta_min REAL,
-        bus_type TEXT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    )""")
-    
-    conn.commit()
     conn.close()
-    print("✅ Bus cache database initialized (SQLite)")
 
 
 # Initialize both databases when module is imported

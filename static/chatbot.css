@@ -1,0 +1,487 @@
+/* ==========================================
+   Transport Buddy Chatbot - Styles
+   ========================================== */
+
+   body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+.content {
+    padding: 0;
+    background: #f5f5f5;
+}
+
+.chatbot-container {
+    max-width: 800px;
+    margin: 20px auto;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 120px);
+    min-height: 500px;
+}
+
+/* ==================== Header ==================== */
+.chatbot-header {
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px 12px 0 0;
+    text-align: center;
+}
+
+.chatbot-header h2 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.chatbot-header .subtitle {
+    margin: 5px 0 0 0;
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+/* ==================== Messages ==================== */
+.chatbot-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    background: #f5f5f5;
+}
+
+.message-bubble {
+    max-width: 70%;
+    padding: 12px 16px;
+    border-radius: 18px;
+    margin-bottom: 10px;
+    word-wrap: break-word;
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.bot-message-container { 
+    display: flex; 
+    justify-content: flex-start; 
+}
+
+.user-message-container { 
+    display: flex; 
+    justify-content: flex-end; 
+}
+
+.bot-message {
+    background: #ffffff;
+    color: #333;
+    border: 1px solid #e0e0e0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.user-message {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.message-bubble ul {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.message-bubble li {
+    margin: 5px 0;
+}
+
+/* ==================== Bus Stop Cards ==================== */
+.bus-stop-card {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.bus-stop-card:hover {
+    border-color: #667eea;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+}
+
+.bus-stop-code {
+    font-weight: 600;
+    color: #667eea;
+    font-size: 16px;
+}
+
+.bus-stop-name {
+    color: #333;
+    margin: 4px 0;
+}
+
+.bus-stop-distance {
+    color: #666;
+    font-size: 12px;
+}
+
+/* ==================== Bus Arrival Cards ==================== */
+.bus-arrival-card {
+    background: white;
+    border-left: 4px solid #667eea;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0;
+}
+
+.service-number {
+    font-weight: 700;
+    font-size: 20px;
+    color: #667eea;
+    margin-bottom: 8px;
+}
+
+.bus-timing {
+    display: flex;
+    align-items: center;
+    margin: 6px 0;
+    padding: 8px;
+    background: #f8f9fa;
+    border-radius: 6px;
+}
+
+.timing-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    margin-right: 10px;
+}
+
+.timing-arriving {
+    background: #28a745;
+    color: white;
+}
+
+.timing-soon {
+    background: #ffc107;
+    color: #333;
+}
+
+.timing-later {
+    background: #6c757d;
+    color: white;
+}
+
+.load-indicator {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    margin-left: 8px;
+}
+
+.load-sea {
+    background: #d4edda;
+    color: #155724;
+}
+
+.load-sda {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.load-lsd {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.bus-type {
+    color: #666;
+    font-size: 12px;
+    margin-left: 8px;
+}
+
+/* ==================== Route Planning ==================== */
+.route-response {
+    margin: 10px 0;
+}
+
+.route-response h3 {
+    color: #667eea;
+    margin-bottom: 15px;
+    font-size: 18px;
+}
+
+.location-info {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.location-card {
+    flex: 1;
+    min-width: 200px;
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 8px;
+    border-left: 4px solid #667eea;
+    font-size: 13px;
+}
+
+.location-card strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #333;
+}
+
+.small-text {
+    font-size: 12px;
+    color: #666;
+    margin: 4px 0;
+}
+
+.bus-stop-info {
+    margin-top: 8px;
+    padding: 8px;
+    background: white;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.routes-container h4 {
+    margin: 12px 0 8px 0;
+    color: #333;
+    font-size: 15px;
+}
+
+.route-option {
+    background: #fff;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.route-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.eta-badge {
+    background: #10b981;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.route-leg {
+    margin: 8px 0;
+    padding-left: 10px;
+    border-left: 3px solid #667eea;
+}
+
+.transfer-indicator {
+    color: #f59e0b;
+    font-size: 12px;
+    margin-bottom: 5px;
+    font-weight: 600;
+}
+
+.bus-service {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0;
+}
+
+.bus-number {
+    background: #667eea;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.stops-count {
+    color: #666;
+    font-size: 12px;
+}
+
+.route-path {
+    color: #555;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* ==================== Quick Actions ==================== */
+.quick-actions {
+    padding: 10px 20px 0 20px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn-quick-action {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.btn-quick-action:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* ==================== Input Area ==================== */
+.chatbot-input-area {
+    background: white;
+    border-top: 1px solid #e0e0e0;
+    border-radius: 0 0 12px 12px;
+}
+
+.input-group {
+    display: flex;
+    padding: 15px 20px;
+    gap: 10px;
+}
+
+.chatbot-input {
+    flex: 1;
+    padding: 12px 16px;
+    border: 2px solid #e0e0e0;
+    border-radius: 24px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.chatbot-input:focus { 
+    border-color: #667eea; 
+}
+
+.btn-send {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 12px 28px;
+    border-radius: 24px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.btn-send:hover { 
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-send:active {
+    transform: translateY(0);
+}
+
+/* ==================== Typing Indicator ==================== */
+.typing-indicator {
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+}
+
+.typing-indicator span {
+    height: 8px;
+    width: 8px;
+    background: #667eea;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 5px;
+    animation: typing 1.4s infinite;
+}
+
+.typing-indicator span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes typing {
+    0%, 60%, 100% { 
+        transform: translateY(0); 
+        opacity: 0.5; 
+    }
+    30% { 
+        transform: translateY(-10px); 
+        opacity: 1; 
+    }
+}
+
+/* ==================== Scrollbar Styling ==================== */
+.chatbot-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chatbot-messages::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.chatbot-messages::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+
+.chatbot-messages::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* ==================== Mobile Responsive ==================== */
+@media (max-width: 768px) {
+    .chatbot-container {
+        margin: 10px;
+        height: calc(100vh - 80px);
+        border-radius: 8px;
+    }
+    
+    .message-bubble {
+        max-width: 85%;
+    }
+    
+    .chatbot-header h2 {
+        font-size: 20px;
+    }
+
+    .location-info {
+        flex-direction: column;
+    }
+
+    .location-card {
+        min-width: 100%;
+    }
+
+    .quick-actions {
+        justify-content: center;
+    }
+}

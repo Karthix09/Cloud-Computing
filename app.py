@@ -21,6 +21,8 @@ init_users_db()
 # Load environment variables
 load_dotenv()
 
+from datetime import timedelta
+
 # ==================== CONFIGURATION ====================
 API_KEY = os.getenv("API_KEY")
 TRAFFIC_API_KEY = os.getenv("TRAFFIC_API_KEY") or API_KEY
@@ -35,22 +37,30 @@ BUS_DB_FILE = os.path.join(BASE_DIR, "database/bus_data.db")
 
 # ==================== FLASK APP ====================
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "change-me-to-strong-secret")
+app.secret_key = os.getenv("SECRET_KEY")
+if not app.secret_key:
+    raise ValueError("SECRET_KEY must be set!")
+
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.register_blueprint(auth_bp)
 
 # ==================== CHATBOT blueprint ====================
 app.register_blueprint(chatbot_bp)
 
-# ==================== CHATBOT blueprint ====================
+# ==================== Charts blueprint ====================
 app.register_blueprint(charts_bp)
+
 # ==================== LOGIN REQUIRED ====================
-# @app.before_request
-# def require_login():
-#     open_paths = ("/login", "/register", "/logout", "/static/", "/favicon.ico")
-#     if request.path.startswith(open_paths):
-#         return
-#     if not session.get("user_id"):
-#         return redirect(url_for("auth.login"))
+@app.before_request
+def require_login():
+    open_paths = ("/login", "/register", "/logout", "/static/", "/favicon.ico")
+    if request.path.startswith(open_paths):
+        return
+    if not session.get("user_id"):
+        return redirect(url_for("auth.login"))
 
 # ==================== BUS MODULE ====================
 
@@ -869,11 +879,19 @@ def remove_bus_favorite():
 
 
 # ==================== TRAFFIC MODULE ====================
-# Global state
 traffic_last_update = ""
 
-# SQLite setup for traffic
-traffic_engine = create_engine("sqlite:///database/TrafficIncidents.db", future=True)
+# Traffic database - PostgreSQL in production, SQLite in development
+if os.getenv('FLASK_ENV') == 'production' or IS_PRODUCTION:
+    # PostgreSQL for production
+    db_url = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:5432/{os.getenv('DB_NAME')}"
+    traffic_engine = create_engine(db_url, future=True)
+    print("✅ Using PostgreSQL for traffic data (Production)")
+else:
+    # SQLite for local development
+    traffic_engine = create_engine("sqlite:///database/TrafficIncidents.db", future=True)
+    print("✅ Using SQLite for traffic data (Development)")
+
 traffic_metadata = MetaData()
 incidents_table = Table(
     "incidents", traffic_metadata,

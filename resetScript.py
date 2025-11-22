@@ -97,18 +97,18 @@ before = c.fetchone()[0]
 print(f"📊 Rows before: {before:,}")
 
 # Delete all rows
-# print("🗑️  Deleting all bus routes...")
-# c.execute("DELETE FROM bus_routes")
-# conn.commit()
+print("🗑️  Deleting all bus routes...")
+c.execute("DELETE FROM bus_routes")
+conn.commit()
 
-# Verify deletion
-# c.execute("SELECT COUNT(*) FROM bus_routes")
-# after = c.fetchone()[0]
-# print(f"📊 Rows after: {after:,}")
+#Verify deletion
+c.execute("SELECT COUNT(*) FROM bus_routes")
+after = c.fetchone()[0]
+print(f"📊 Rows after: {after:,}")
 
-# if after == 0:
-#     print("✅ All bus routes deleted successfully!")
-# else:
-#     print(f"⚠️  Warning: {after} rows still remain")
+if after == 0:
+    print("✅ All bus routes deleted successfully!")
+else:
+    print(f"⚠️  Warning: {after} rows still remain")
 
 conn.close()

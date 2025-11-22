@@ -21,6 +21,10 @@
         alert("Passwords do not match. Please try again.");
         return false;
       }
+      if (pw.length < 6) {
+        alert("Password must be at least 6 characters long.");
+        return false;
+      }
       return true;
     }
   </script>
@@ -54,16 +58,16 @@
         <input type="email" name="email" placeholder="Enter your email" required>
 
         <label>Phone</label>
-        <input type="text" name="phone" placeholder="Enter your phone number" required>
+        <input type="text" name="phone" placeholder="Enter your phone number">
 
         <label>Password</label>
         <input type="password" name="password" id="password" placeholder="Create a password" required>
 
         <label>Confirm Password</label>
-        <input type="password" id="confirm_password" placeholder="Re-enter your password" required>
+        <input type="password" name="confirm_password" id="confirm_password" placeholder="Re-enter your password" required>
 
         <label>Date of Birth</label>
-        <input type="date" name="date_of_birth" required>
+        <input type="date" name="date_of_birth">
 
         <button type="submit">Register</button>
       </form>
