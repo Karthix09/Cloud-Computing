@@ -540,65 +540,177 @@ def chatbot_nearby_stops():
     except Exception as e:
         logger.error(f"Error getting nearby stops: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed to get nearby stops"}), 500
+    
+@chatbot_bp.route("/api/chatbot/nearby-stops", methods=["POST"])
+@login_required
+def get_nearby_stops():
+    """Find bus stops near given coordinates"""
+    try:
+        data = request.get_json() or {}
+        latitude = float(data.get('latitude'))
+        longitude = float(data.get('longitude'))
+        radius = 300  # 300 meters
+        
+        logger.info(f"Finding stops near {latitude}, {longitude} within {radius}m")
+        
+        # Calculate distance using Haversine formula
+        import math
+        
+        def haversine(lat1, lon1, lat2, lon2):
+            R = 6371000  # Earth radius in meters
+            phi1 = math.radians(lat1)
+            phi2 = math.radians(lat2)
+            dphi = math.radians(lat2 - lat1)
+            dlambda = math.radians(lon2 - lon1)
+            
+            a = math.sin(dphi/2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda/2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+            
+            return R * c
+        
+        # Get all bus stops from database
+        from database import get_bus_db_connection
+        conn = get_bus_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT code, description, lat, lon, road FROM bus_stops WHERE lat IS NOT NULL AND lon IS NOT NULL")
+        all_stops = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        # Find stops within radius
+        nearby_stops = []
+        for stop in all_stops:
+            # Handle both dict and tuple formats
+            if isinstance(stop, dict):
+                stop_code = stop['code']
+                stop_desc = stop['description']
+                stop_lat = float(stop['lat'])
+                stop_lon = float(stop['lon'])
+                stop_road = stop.get('road', '')
+            else:
+                stop_code = stop[0]
+                stop_desc = stop[1]
+                stop_lat = float(stop[2])
+                stop_lon = float(stop[3])
+                stop_road = stop[4] if len(stop) > 4 else ''
+            
+            distance = haversine(latitude, longitude, stop_lat, stop_lon)
+            
+            if distance <= radius:
+                nearby_stops.append({
+                    'code': stop_code,
+                    'description': stop_desc,
+                    'road': stop_road,
+                    'latitude': stop_lat,
+                    'longitude': stop_lon,
+                    'distance': int(distance)
+                })
+        
+        # Sort by distance
+        nearby_stops.sort(key=lambda x: x['distance'])
+        
+        logger.info(f"Found {len(nearby_stops)} stops within {radius}m")
+        
+        # Return in format expected by frontend
+        return jsonify({
+            'type': 'nearby_stops',
+            'stops': nearby_stops[:10]
+        })
+        
+    except Exception as e:
+        logger.error(f"Error finding nearby stops: {str(e)}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to find nearby stops. Please try again.'
+        }), 500
 
-
-# ======================================
-# BUS ARRIVALS VIA LEX INTENT
-# ======================================
 @chatbot_bp.route("/api/chatbot/arrivals/<bus_stop_code>", methods=["GET"])
 @login_required
-def chatbot_bus_arrivals(bus_stop_code):
+def get_bus_arrivals_endpoint(bus_stop_code):
+    """Get bus arrivals for a specific bus stop"""
     try:
-        if not lex_client:
-            return jsonify({"error": "Lex client not configured"}), 500
+        logger.info(f"Getting arrivals for bus stop: {bus_stop_code}")
         
-        service_no = request.args.get("serviceNo")
-        session_id = request.args.get("sessionId", str(session.get("user_id")))
+        # Get arrivals from LTA API
+        import requests
+        import os
+        from datetime import datetime, timezone, timedelta
         
-        # Build slots
-        slots = {
-            "BusStopCode": {
-                "shape": "Scalar",
-                "value": {
-                    "originalValue": bus_stop_code,
-                    "interpretedValue": bus_stop_code,
-                    "resolvedValues": [bus_stop_code]
-                }
-            }
+        LTA_API_KEY = os.environ.get('LTA_API_KEY')
+        
+        if not LTA_API_KEY:
+            logger.error("LTA_API_KEY not set")
+            return jsonify({
+                'error': 'LTA API key not configured'
+            }), 500
+        
+        headers = {
+            'AccountKey': LTA_API_KEY,
+            'accept': 'application/json'
         }
         
-        if service_no:
-            slots["ServiceNumber"] = {
-                "shape": "Scalar",
-                "value": {
-                    "originalValue": service_no,
-                    "interpretedValue": service_no,
-                    "resolvedValues": [service_no]
-                }
-            }
-        
-        response = lex_client.recognize_text(
-            botId=LEX_BOT_ID,
-            botAliasId=LEX_BOT_ALIAS_ID,
-            localeId=LEX_LOCALE_ID,
-            sessionId=session_id,
-            text=f"Get arrivals for {bus_stop_code}",
-            sessionState={
-                "intent": {
-                    "name": "GetBusArrivals",
-                    "slots": slots
-                }
-            }
+        response = requests.get(
+            'https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival',
+            headers=headers,
+            params={'BusStopCode': bus_stop_code},
+            timeout=10
         )
         
-        session_attrs = response.get("sessionState", {}).get("sessionAttributes", {})
-        data_raw = session_attrs.get("responseData")
+        logger.info(f"LTA API status: {response.status_code}")
         
-        if data_raw:
-            return jsonify(json.loads(data_raw))
+        if response.status_code == 401:
+            return jsonify({
+                'error': 'Invalid LTA API key'
+            }), 500
         
-        return jsonify({"error": "No data returned"}), 404
+        if response.status_code != 200:
+            return jsonify({
+                'error': f'LTA API returned status {response.status_code}'
+            }), 500
+        
+        data = response.json()
+        services = data.get('Services', [])
+        
+        logger.info(f"Found {len(services)} services")
+        
+        # Format response
+        formatted_services = []
+        sg_tz = timezone(timedelta(hours=8))
+        now = datetime.now(sg_tz)
+        
+        for service in services:
+            buses = []
+            for bus_key in ['NextBus', 'NextBus2', 'NextBus3']:
+                bus = service.get(bus_key, {})
+                if bus and bus.get('EstimatedArrival'):
+                    eta_str = bus.get('EstimatedArrival')
+                    eta_time = datetime.fromisoformat(eta_str)
+                    diff_minutes = int((eta_time - now).total_seconds() / 60)
+                    
+                    if diff_minutes >= 0:
+                        buses.append({
+                            'eta': eta_str,
+                            'minutes_away': diff_minutes,
+                            'load': bus.get('Load', 'N/A'),
+                            'type': bus.get('Type', 'SD'),
+                            'feature': bus.get('Feature', '')
+                        })
+            
+            if buses:
+                formatted_services.append({
+                    'service_no': service.get('ServiceNo'),
+                    'operator': service.get('Operator'),
+                    'buses': buses
+                })
+        
+        return jsonify({
+            'arrivals': {
+                'services': formatted_services,
+                'message': 'No buses available' if not formatted_services else None
+            }
+        })
         
     except Exception as e:
         logger.error(f"Error getting bus arrivals: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to get bus arrivals"}), 500
+        return jsonify({
+            'error': f'Failed to get arrivals: {str(e)}'
+        }), 500

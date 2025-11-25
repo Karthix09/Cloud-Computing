@@ -308,6 +308,7 @@ def build_route_graph_from_cache(bus_routes_by_service):
 
 try:
     ROUTE_GRAPH
+
 except NameError:
     
     if 'bus_routes_by_service' in globals() and bus_routes_by_service:
@@ -633,36 +634,133 @@ def get_route():
         "routes": results
     })
 
+#with fixed timezone issues
 @app.route("/bus_arrivals/<code>")
+@login_required
 def bus_arrivals(code):
     try:
-        r = requests.get(f"{BASE_URL}/v3/BusArrival?BusStopCode={code}",
-                         headers=BUS_HEADERS, timeout=10)
+        # Call LTA API
+        r = requests.get(
+            f"{BASE_URL}/v3/BusArrival?BusStopCode={code}",
+            headers=BUS_HEADERS,
+            timeout=10
+        )
+        r.raise_for_status()
+        
         data = r.json()
-        now = datetime.now()
+        
+        # Use Singapore timezone for proper comparison
+        from datetime import timezone, timedelta
+        sg_tz = timezone(timedelta(hours=8))
+        now = datetime.now(sg_tz)  # ← Singapore time, not UTC!
+        
         results = []
+        
         for s in data.get("Services", []):
             waits = []
             for key in ["NextBus", "NextBus2", "NextBus3"]:
-                t = s[key].get("EstimatedArrival")
-                if t:
-                    diff = (datetime.fromisoformat(t.replace("+08:00", "")) - now).total_seconds() / 60
-                    if diff >= 0:
-                        waits.append(round(diff, 1))
-            results.append({"service": s["ServiceNo"], "type": s["NextBus"].get("Type"), "eta": waits})
-
-        # Log
-        conn = get_bus_db_connection()  # NEW
-        c = conn.cursor()
-        for s in results:
-            for eta in s["eta"]:
-                c.execute("INSERT INTO bus_arrivals (stop_code, service, eta_min, bus_type) VALUES (?,?,?,?)",
-                          (code, s["service"], eta, s["type"]))
-        conn.commit()
-        conn.close()
+                eta_str = s[key].get("EstimatedArrival")
+                if eta_str:
+                    try:
+                        # Parse with timezone info intact
+                        eta_time = datetime.fromisoformat(eta_str)
+                        
+                        # Calculate difference in minutes
+                        diff = (eta_time - now).total_seconds() / 60
+                        
+                        if diff >= 0:
+                            waits.append(round(diff, 1))
+                    except Exception as e:
+                        print(f"Error parsing time: {e}")
+                        continue
+            
+            results.append({
+                "service": s["ServiceNo"],
+                "type": s["NextBus"].get("Type", "Unknown"),
+                "eta": waits
+            })
+        
         return jsonify(results)
+        
     except Exception as e:
-        return jsonify({"error": str(e)})
+        print(f"Bus arrivals error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/bus-arrivals/<bus_stop_code>")
+@login_required
+def get_bus_arrivals_api(bus_stop_code):
+    """API endpoint for bus arrivals"""
+    try:
+        # Get arrivals from LTA API
+        import requests
+        from datetime import datetime, timezone, timedelta
+        
+        LTA_API_KEY = os.environ.get('LTA_API_KEY')
+        
+        headers = {
+            'AccountKey': LTA_API_KEY,
+            'accept': 'application/json'
+        }
+        
+        response = requests.get(
+            'https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival',
+            headers=headers,
+            params={'BusStopCode': bus_stop_code},
+            timeout=10
+        )
+        
+        if response.status_code != 200:
+            return jsonify({
+                'success': False,
+                'error': f'LTA API returned status {response.status_code}'
+            }), 500
+        
+        data = response.json()
+        services = data.get('Services', [])
+        
+        # Format response
+        formatted_services = []
+        sg_tz = timezone(timedelta(hours=8))
+        now = datetime.now(sg_tz)
+        
+        for service in services:
+            buses = []
+            for bus_key in ['NextBus', 'NextBus2', 'NextBus3']:
+                bus = service.get(bus_key, {})
+                if bus and bus.get('EstimatedArrival'):
+                    eta_str = bus.get('EstimatedArrival')
+                    eta_time = datetime.fromisoformat(eta_str)
+                    diff_minutes = int((eta_time - now).total_seconds() / 60)
+                    
+                    if diff_minutes >= 0:
+                        buses.append({
+                            'eta': eta_str,
+                            'minutes': diff_minutes,
+                            'load': bus.get('Load', 'N/A'),
+                            'type': bus.get('Type', 'SD'),
+                            'feature': bus.get('Feature', '')
+                        })
+            
+            if buses:
+                formatted_services.append({
+                    'service_no': service.get('ServiceNo'),
+                    'operator': service.get('Operator'),
+                    'buses': buses
+                })
+        
+        return jsonify({
+            'success': True,
+            'bus_stop_code': bus_stop_code,
+            'services': formatted_services,
+            'timestamp': datetime.now(sg_tz).isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting bus arrivals: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route("/bus/history/<stop_code>")
 def bus_history(stop_code):
@@ -1013,13 +1111,34 @@ def traffic_dashboard():
     with traffic_engine.connect() as conn:
         df = pd.read_sql("SELECT * FROM incidents", conn)
 
-    if not df.empty:
-        df["RoadCategory"] = df["Message"].apply(extract_road)
-    else:
-        df["RoadCategory"] = ""
+    # Handle empty dataframe
+    if df.empty:
+        # No traffic data - show empty map
+        sg_map = folium.Map(location=[1.3521, 103.8198], zoom_start=12)
+        empty_html = sg_map._repr_html_()
+        
+        return render_template(
+            "traffic_main.html",
+            filtered_html=empty_html,
+            last_update="No data available yet",
+            total_incidents=0,
+            most_road="N/A",
+            most_type="N/A",
+            type_options=[],
+            road_options=[],
+            search_query="",
+            type_query="",
+            road_query="",
+            type_counts={},
+            no_results=True
+        )
 
-    road_options = sorted([r for r in df["RoadCategory"].dropna().unique() if r])
-    type_options = sorted([t for t in df["Type"].dropna().unique() if t])
+    # Process data only if not empty
+    df["RoadCategory"] = df["Message"].apply(extract_road)
+
+    # Safely get options
+    road_options = sorted([r for r in df["RoadCategory"].dropna().unique() if r]) if "RoadCategory" in df.columns else []
+    type_options = sorted([t for t in df["Type"].dropna().unique() if t]) if "Type" in df.columns else []
 
     if clear_filter:
         search_query = selected_type = selected_road = ""
@@ -1035,10 +1154,8 @@ def traffic_dashboard():
         filtered = filtered[filtered["RoadCategory"] == selected_road]
 
     total_incidents = len(filtered)
-    most_road = filtered["RoadCategory"].value_counts().idxmax() if not filtered.empty and not filtered[
-        "RoadCategory"].dropna().empty else "N/A"
-    most_type = filtered["Type"].value_counts().idxmax() if not filtered.empty and not filtered[
-        "Type"].dropna().empty else "N/A"
+    most_road = filtered["RoadCategory"].value_counts().idxmax() if not filtered.empty and not filtered["RoadCategory"].dropna().empty else "N/A"
+    most_type = filtered["Type"].value_counts().idxmax() if not filtered.empty and not filtered["Type"].dropna().empty else "N/A"
     type_counts = filtered["Type"].value_counts().to_dict() if not filtered.empty else {}
     no_results = filtered.empty
 
@@ -1291,6 +1408,8 @@ def get_bus_route(service_no, bus_stop_code):
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+__all__ = ['dijkstra_multi_wrapper', 'app']
 
 # ==================== MAIN ====================
 if __name__ == "__main__":
