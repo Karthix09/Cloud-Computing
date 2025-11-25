@@ -1154,18 +1154,38 @@ def get_bus_route(service_no, bus_stop_code):
         # Normalize stop code to string (remove any whitespace, ensure consistent format)
         bus_stop_code = str(bus_stop_code).strip()
 
-        # Find the direction of the current bus stop 
-        current_stop_info = None
+        # Find ALL occurrences of current stop (handles interchanges)
+        matching_stops = []
         for route in all_routes:
+            # Add all the matching bus stop codes to matching_stops array;
             if str(route.get("BusStopCode", "")).strip() == bus_stop_code:
-                current_stop_info = route
-                break
-
-        # If current stop is not found
-        if not current_stop_info:
+                matching_stops.append(route)
+        # If current stop is not found in list 
+        if not matching_stops:
             conn.close()
-            return jsonify({"error": f"Bus stop {bus_stop_code} not found on route"}), 404
+            return jsonify({"error": f"Bus stop {bus_stop_code} not found on rute"}), 404
         
+        print(f"✅ Found {len(matching_stops)} direction(s) for stop {bus_stop_code}")
+
+        # if multiple directions exist then pick the one with more stops ahead 
+        current_stop_info = None
+
+        if len(matching_stops) == 1:
+            # Only one direction exist
+            current_stop_info = matching_stops[0]
+            print(f"Single direction found: Direction {current_stop_info['Direction']}")
+        else:
+            # First, try to find sequence = 1, then its 
+            for stop in matching_stops:
+                if stop['StopSequence'] == 1:
+                    current_stop_info = stop
+                    break
+            
+            print(f"🔀 Multiple directions found at interchange:")
+            for stop in matching_stops:
+                print(f"   Direction {stop['Direction']}: Sequence {stop['StopSequence']}")
+            print(f"✅ Selected Direction {current_stop_info['Direction']} (Sequence {current_stop_info['StopSequence']})")
+
         # Get the current bus direction and the bus stop sequence no.
         current_direction = current_stop_info.get("Direction")
         current_sequence = current_stop_info.get("StopSequence")
