@@ -370,7 +370,9 @@ body.dark .leaflet-routing-container a {
   align-items: center;
   gap: 12px;">
   <input id="origin" placeholder="From (Bus Stop Code)" style="flex:1;padding:10px 14px;border-radius:10px;border:1px solid #ccc;">
-  <input id="destination" placeholder="To (Bus Stop Code)" style="flex:1;padding:10px 14px;border-radius:10px;border:1px solid #ccc;">
+  <select id="destination" style="flex:1;padding:10px 14px;border-radius:10px;border:1px solid #ccc;background:white;cursor:pointer;">
+    <option value="">To (Select Destination)</option>
+  </select>
   <button class="search" onclick="calculateRoute()">Find Route</button>
   <button class="reset" onclick="resetRoute()">Reset</button>
 </div>
@@ -865,7 +867,36 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
     const stopsRemaining = routeData.stops_remaining;    // Count only
     const currentStop = routeData.current_stop;
     const direction = routeData.direction;
+
+    // Extract remaining stops for dropdown (from existing data)
+    const currentStopIndex = fullRoute.findIndex(stop => stop.is_current);
+    const remainingStops = fullRoute.slice(currentStopIndex + 1); // All stops after current
+
+    // NEW: Populate dropdown with remaining stops
+    const destinationDropdown = document.getElementById('destination');
+    destinationDropdown.innerHTML = '<option value="">To (Select Destination)</option>';
+
+    if (remainingStops.length > 0) {
+      remainingStops.forEach(stop => {
+        const option = document.createElement('option');
+        option.value = stop.stop_code;
+        option.textContent = `${stop.stop_code} - ${stop.description}`;
+        destinationDropdown.appendChild(option); //append options ot drop down 
+      });
+      
+      // Adding event listener to dropdown
+      destinationDropdown.onchange = function() {
+        if (this.value) {
+          // Pass the full route data we already have
+          showRouteToDestination(serviceNo, currentStopCode, this.value, fullRoute, analyticsData);
+        }
+      };
+    }
+
+    // Set origin bus stop input
+    document.getElementById('origin').value = `${currentStopCode}`;
     
+    // For full route
     // Build array of coordinates for waypoints
     const routeCoordinates = [];
     const stopMarkers = [];
@@ -944,6 +975,9 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
     const coords = routeCoordinates.map(c => `${c[1]},${c[0]}`).join(';');
     const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`; //API call for OSRM 
     
+    let distance = null;
+    let duration = null; 
+
     // Fetch route geometry from OSRM
     const osrmResponse = await fetch(osrmUrl);
     const osrmData = await osrmResponse.json();
@@ -976,8 +1010,8 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
       }).addTo(map);
       
       // Get route statistics
-      const distance = (osrmData.routes[0].distance / 1000).toFixed(1); // km
-      const duration = Math.round(osrmData.routes[0].duration / 60); // minutes
+      distance = (osrmData.routes[0].distance / 1000).toFixed(1); // km
+      duration = Math.round(osrmData.routes[0].duration / 60); // minutes
       
       // Add popup to route
       routePolyline.bindPopup(`
@@ -1008,9 +1042,15 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
 
     // Pass correct first stop description
     const firstStop = fullRoute.find(s => s.is_current, );
+
+    // Journey data for analytics display if distance and duration is given 
+    let journeyData = (distance && duration) ?  {
+    distance: distance,  // calculated above
+    duration: duration   // calculated above
+  } : null;
     
     // Create and display route information panel
-    displayRouteInfo(serviceNo, stopsRemaining, direction, firstStop?.description || fullRoute[0]?.description, analyticsData);
+    displayRouteInfo(serviceNo, stopsRemaining, firstStop?.description || fullRoute[0]?.description, null, analyticsData, journeyData=null);
     
     // Show clear route button
     const clearBtn = document.getElementById('clearRouteBtn');
@@ -1027,11 +1067,192 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
 }
 
 
+// uses data already fetched
+async function showRouteToDestination(serviceNo, currentStopCode, destinationStopCode, fullRoute, analyticsData) {
+  try {
+    console.log(`Showing route from ${currentStopCode} to ${destinationStopCode}`);
+    
+    // Clear previous route
+    clearBusRoutes();
+    
+    // NO API CALL: Use fullRoute data passed as parameter
+    const direction = fullRoute[0].direction || 1; // Extract direction from route data
+    
+    // Find indices of current and destination stops
+    let currentIndex = -1;
+    let destinationIndex = -1;
+    
+    fullRoute.forEach((stop, index) => {
+      if (stop.stop_code === currentStopCode) currentIndex = index;
+      if (stop.stop_code === destinationStopCode) destinationIndex = index;
+    });
+    
+    if (currentIndex === -1 || destinationIndex === -1 || currentIndex >= destinationIndex) {
+      alert('Invalid stop selection');
+      return;
+    }
+    
+    // Get route segment (from current to destination)
+    const routeSegment = fullRoute.slice(currentIndex, destinationIndex + 1);
+    const stopsRemaining = routeSegment.length - 1;
+    
+    // Build coordinates and markers
+    const routeCoordinates = [];
+    const stopMarkers = [];
+    
+    routeSegment.forEach((stop, index) => {
+      const lat = parseFloat(stop.lat);
+      const lon = parseFloat(stop.lon);
+      
+      if (!isNaN(lat) && !isNaN(lon) && 
+          lat >= 1.0 && lat <= 1.5 && 
+          lon >= 103.5 && lon <= 104.1) {
+        
+        routeCoordinates.push([lat, lon]);
+        
+        // Marker icons: Red for current, Orange for destination, Blue for others
+        let markerIcon;
+        if (index === 0) {
+          // Current stop - RED
+          markerIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [30, 46],
+            iconAnchor: [15, 46],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+          });
+        } else if (index === routeSegment.length - 1) {
+          // Destination stop - ORANGE (brown-ish)
+          markerIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [30, 46],
+            iconAnchor: [15, 46],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+          });
+        } else {
+          // Intermediate stops - BLUE
+          markerIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+          });
+        }
+        
+        const marker = L.marker([lat, lon], { icon: markerIcon }).addTo(map);
+        
+        let stopLabel = '🚌 Bus Stop';
+        if (index === 0) stopLabel = '🚏 Current Stop';
+        if (index === routeSegment.length - 1) stopLabel = '🎯 Destination';
+        
+        const popupContent = `
+          <div style="text-align: center; min-width: 150px;">
+            <strong>${stopLabel}</strong><br>
+            <strong>${stop.description || 'Unknown'}</strong><br>
+            <small>Stop Code: ${stop.stop_code}</small><br>
+            <small>Road: ${stop.road || 'N/A'}</small><br>
+            <strong>Bus ${serviceNo}</strong>
+          </div>
+        `;
+        
+        marker.bindPopup(popupContent);
+        stopMarkers.push(marker);
+      }
+    });
+    
+    if (routeCoordinates.length < 2) {
+      alert('Insufficient coordinates for route');
+      return;
+    }
+    
+    // Draw route with OSRM
+    const coords = routeCoordinates.map(c => `${c[1]},${c[0]}`).join(';');
+    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
 
+    let distance = null
+    let duration = null
+    
+    const osrmResponse = await fetch(osrmUrl);
+    const osrmData = await osrmResponse.json();
+    
+    if (osrmData.code === 'Ok' && osrmData.routes && osrmData.routes.length > 0) {
+      const routeGeometry = osrmData.routes[0].geometry.coordinates;
+      const leafletCoords = routeGeometry.map(coord => [coord[1], coord[0]]);
+
+      let routeColor = '#FF5733';
+      if (analyticsData && analyticsData.found) {
+        const drift = Math.abs(analyticsData.avg_eta_drift);
+        // if (drift >= 30) routeColor = '#dc2626';
+        // else if (drift >= 20) routeColor = '#ea580c';
+        // else if (drift >= 10) routeColor = '#d97706';
+        // else routeColor = '#059669';
+      }
+      
+      const routePolyline = L.polyline(leafletCoords, {
+        color: '#FF5733',
+        weight: 6,
+        opacity: 0.8,
+        smoothFactor: 1.0,
+        lineJoin: 'round',
+        lineCap: 'round'
+      }).addTo(map);
+      
+      distance = (osrmData.routes[0].distance / 1000).toFixed(1);
+      duration = Math.round(osrmData.routes[0].duration / 60);
+      
+      routePolyline.bindPopup(`
+        <div style="text-align: center;">
+          <strong>🚌 Bus ${serviceNo}</strong><br>
+          <strong>${stopsRemaining} stops remaining</strong><br>
+          Distance: ${distance} km<br>
+          Est. Time: ${duration} min
+        </div>
+      `);
+      
+      routePolylines.push(routePolyline);
+      map.fitBounds(routePolyline.getBounds(), { padding: [50, 50], maxZoom: 16 });
+    }
+    
+    stopMarkers.forEach(marker => routePolylines.push(marker));
+    
+    // Get stop descriptions
+    const currentStopDesc = routeSegment[0].description;
+    const destinationStopDesc = routeSegment[routeSegment.length - 1].description;
+
+    //Create journey data object (only if distance/duration exist)
+    let journeyData = (distance && duration) ? {
+    distance: distance,  // Already calculated above
+    duration: duration   // Already calculated above
+    } : null;
+
+    // Update info panel
+    displayRouteInfo(serviceNo, stopsRemaining, 
+                     currentStopDesc, 
+                     destinationStopDesc, 
+                     analyticsData,
+                     journeyData);
+    
+    const clearBtn = document.getElementById('clearRouteBtn');
+    if (clearBtn) {
+      clearBtn.style.display = 'inline-block';
+    }
+    
+    console.log(`✅ Route segment displayed: ${stopsRemaining} stops from ${currentStopCode} to ${destinationStopCode}`);
+    
+  } catch (error) {
+    console.error('Error showing route to destination:', error);
+    alert('Failed to show route. Please try again.');
+  }
+}
 
 
 // Helper function to display route information panel
-function displayRouteInfo(serviceNo, stopsRemaining, direction, firstStopName, analytics = null) {
+function displayRouteInfo(serviceNo, stopsRemaining, currentStopName, destinationStopName, analytics, journeyData=null) {
   const existingPanel = document.getElementById('routeInfoPanel');
   if (existingPanel) {
     existingPanel.remove();
@@ -1060,8 +1281,60 @@ function displayRouteInfo(serviceNo, stopsRemaining, direction, firstStopName, a
     max-height: 80vh;
     overflow-y: auto;
   `;
-  
-  // Build analytics section HTML
+
+  //Route Display From and To
+  let routeDisplay = `
+    <div style="font-size: 0.85em; color: #666; margin: 8px 0; text-align: left;">
+      <div style="margin: 4px 0;">
+        <strong>From:</strong> ${currentStopName}
+      </div>
+      ${destinationStopName ? `
+        <div style="margin: 4px 0;">
+          <strong>To:</strong> ${destinationStopName}
+        </div>
+      ` : `
+        <div style="margin: 4px 0; font-style: italic; color: #999;">
+          To: (Select destination above)
+        </div>
+      `}
+    </div>
+  `;
+  // Journey Analytics Section 
+  let journeyAnalyticsHTML = '';
+  if (journeyData && journeyData.distance && journeyData.duration) {
+    journeyAnalyticsHTML = `
+      <div style="
+        margin-top: 12px;
+        padding: 12px;
+        background: rgba(255, 87, 51, 0.05);
+        border-radius: 8px;
+        border: 1px solid rgba(255, 87, 51, 0.2);
+      ">
+        <div style="
+          font-size: 0.9em;
+          font-weight: bold;
+          color: #FF5733;
+          margin-bottom: 8px;
+          text-align: center;
+        ">
+          🗺️ Journey Analytics
+        </div>
+        
+        <div style="font-size: 0.85em; color: var(--text-color); line-height: 1.6;">
+          <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+            <span>Distance:</span>
+            <strong>${journeyData.distance} km</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+            <span>Est. Time:</span>
+            <strong>${journeyData.duration} min</strong>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Service analytics section HTML
   let analyticsHTML = '';
   if (analytics && analytics.found) {
     analyticsHTML = `
@@ -1150,14 +1423,10 @@ function displayRouteInfo(serviceNo, stopsRemaining, direction, firstStopName, a
         🚌 Bus ${serviceNo}
       </h3>
       <div style="font-size: 1.2em; font-weight: bold; color: #FF5733; margin: 8px 0;">
-        ${stopsRemaining} stops remaining
+        ${stopsRemaining} stop${stopsRemaining !== 1 ? 's' : ''} remaining
       </div>
-      <div style="font-size: 0.9em; color: var(--text-color); margin: 8px 0;">
-        Direction: ${direction}
-      </div>
-      <div style="font-size: 0.85em; color: #666; margin-top: 8px;">
-        From: ${firstStopName || 'Current Stop'}
-      </div>
+      ${routeDisplay}
+      ${journeyAnalyticsHTML}
       ${analyticsHTML}
     </div>
   `;

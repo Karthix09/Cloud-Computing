@@ -33,14 +33,12 @@ TRAFFIC_HEADERS = {"AccountKey": TRAFFIC_API_KEY, "accept": "application/json"}
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BUS_DB_FILE = os.path.join(BASE_DIR, "database/bus_data.db")
 
-# ==================== FLASK APP ====================
+# ==================== FLASK APP ===========================
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "change-me-to-strong-secret")
 app.register_blueprint(auth_bp)
-
 # ==================== CHATBOT blueprint ====================
 app.register_blueprint(chatbot_bp)
-
 # ==================== CHATBOT blueprint ====================
 app.register_blueprint(charts_bp)
 # ==================== LOGIN REQUIRED ====================
@@ -267,361 +265,361 @@ def get_bus_routes():
     ])
 
 # 💡 ADVANCED BUS ROUTING ENGINE (DIJKSTRA MULTI-STAGE)
-import heapq
-import itertools
-from collections import defaultdict
+# import heapq
+# import itertools
+# from collections import defaultdict
 
-# Tunables
-DEFAULT_HOP_TIME = 1.5    # minutes per hop (Option A)
-TRANSFER_PENALTY = 3.0    # minutes penalty when switching services
-MAX_TRANSFERS_ALLOWED = 4 # allows up to 5 buses total (0..4 transfers)
-MAX_EXPANSIONS = 100000   # safety cap to avoid runaway search
-TOP_K_RESULTS = 3
+# # Tunables
+# DEFAULT_HOP_TIME = 1.5    # minutes per hop (Option A)
+# TRANSFER_PENALTY = 3.0    # minutes penalty when switching services
+# MAX_TRANSFERS_ALLOWED = 4 # allows up to 5 buses total (0..4 transfers)
+# MAX_EXPANSIONS = 100000   # safety cap to avoid runaway search
+# TOP_K_RESULTS = 3
 
-# counter to avoid Python heap comparing non-comparable payloads
-COUNTER = itertools.count()
+# # counter to avoid Python heap comparing non-comparable payloads
+# COUNTER = itertools.count()
 
-def build_route_graph_from_cache(bus_routes_by_service):
-    """
-    Build adjacency list from bus_routes_by_service cache.
-    bus_routes_by_service: dict keyed (service, direction) -> list of (stop_code, seq)
-    Returns graph: dict stop_code -> list of (next_stop_code, service_key)
-    """
-    graph = defaultdict(list)
-    for (svc, direction), stops in bus_routes_by_service.items():
-        ordered = [s for s, _ in sorted(stops, key=lambda x: x[1])]
-        for i in range(len(ordered) - 1):
-            a = ordered[i]
-            b = ordered[i + 1]
-            graph[a].append((b, (svc, direction)))
-    return graph
+# def build_route_graph_from_cache(bus_routes_by_service):
+#     """
+#     Build adjacency list from bus_routes_by_service cache.
+#     bus_routes_by_service: dict keyed (service, direction) -> list of (stop_code, seq)
+#     Returns graph: dict stop_code -> list of (next_stop_code, service_key)
+#     """
+#     graph = defaultdict(list)
+#     for (svc, direction), stops in bus_routes_by_service.items():
+#         ordered = [s for s, _ in sorted(stops, key=lambda x: x[1])]
+#         for i in range(len(ordered) - 1):
+#             a = ordered[i]
+#             b = ordered[i + 1]
+#             graph[a].append((b, (svc, direction)))
+#     return graph
 
-try:
-    ROUTE_GRAPH
-except NameError:
+# try:
+#     ROUTE_GRAPH
+# except NameError:
     
-    if 'bus_routes_by_service' in globals() and bus_routes_by_service:
-        ROUTE_GRAPH = build_route_graph_from_cache(bus_routes_by_service)
-    else:
-        ROUTE_GRAPH = defaultdict(list)
+#     if 'bus_routes_by_service' in globals() and bus_routes_by_service:
+#         ROUTE_GRAPH = build_route_graph_from_cache(bus_routes_by_service)
+#     else:
+#         ROUTE_GRAPH = defaultdict(list)
 
-def get_edge_time(service_key, from_stop, to_stop):
-    """
-    Compute time for a single hop. Right now use default constant per hop (Option A).
-    Later, replace this to use precomputed LTA-based edge times.
-    """
-    return DEFAULT_HOP_TIME
+# def get_edge_time(service_key, from_stop, to_stop):
+#     """
+#     Compute time for a single hop. Right now use default constant per hop (Option A).
+#     Later, replace this to use precomputed LTA-based edge times.
+#     """
+#     return DEFAULT_HOP_TIME
 
-def dijkstra_multi(origin, destination,
-                   route_graph=None,
-                   max_transfers=MAX_TRANSFERS_ALLOWED,
-                   top_k=TOP_K_RESULTS):
-    """
-    Dijkstra-like best-first search where state includes (stop, last_service, transfers).
-    """
-    # Always use the latest ROUTE_GRAPH if none provided
-    if route_graph is None:
-        route_graph = ROUTE_GRAPH
+# def dijkstra_multi(origin, destination,
+#                    route_graph=None,
+#                    max_transfers=MAX_TRANSFERS_ALLOWED,
+#                    top_k=TOP_K_RESULTS):
+#     """
+#     Dijkstra-like best-first search where state includes (stop, last_service, transfers).
+#     """
+#     # Always use the latest ROUTE_GRAPH if none provided
+#     if route_graph is None:
+#         route_graph = ROUTE_GRAPH
 
-    # Priority queue entries: (total_time, counter, stop, last_service_key, transfers, legs_list)
-    pq = []
-    heapq.heappush(pq, (0.0, next(COUNTER), origin, None, 0, []))
+#     # Priority queue entries: (total_time, counter, stop, last_service_key, transfers, legs_list)
+#     pq = []
+#     heapq.heappush(pq, (0.0, next(COUNTER), origin, None, 0, []))
 
-    # best known time for (stop, last_service, transfers) -> time
-    best_time = {}
+#     # best known time for (stop, last_service, transfers) -> time
+#     best_time = {}
 
-    solutions = []
-    expansions = 0
-    seen_service_sequences = set()
+#     solutions = []
+#     expansions = 0
+#     seen_service_sequences = set()
 
-    while pq and len(solutions) < top_k and expansions < MAX_EXPANSIONS:
-        total_time, _, stop, last_service, transfers, legs = heapq.heappop(pq)
-        expansions += 1
+#     while pq and len(solutions) < top_k and expansions < MAX_EXPANSIONS:
+#         total_time, _, stop, last_service, transfers, legs = heapq.heappop(pq)
+#         expansions += 1
 
-        state = (stop, last_service, transfers)
-        # prune if we already have better time
-        if state in best_time and total_time > best_time[state] + 1e-6:
-            continue
-        best_time[state] = total_time
+#         state = (stop, last_service, transfers)
+#         # prune if we already have better time
+#         if state in best_time and total_time > best_time[state] + 1e-6:
+#             continue
+#         best_time[state] = total_time
 
-        # reached destination
-        if stop == destination:
-            seq = tuple((leg["service"], leg.get("direction")) for leg in legs)
-            if seq in seen_service_sequences:
-                continue
-            seen_service_sequences.add(seq)
-            solutions.append({
-                "transfer": len(legs) > 1,
-                "legs": legs,
-                "estimated_time_min": round(total_time, 1)
-            })
-            continue
+#         # reached destination
+#         if stop == destination:
+#             seq = tuple((leg["service"], leg.get("direction")) for leg in legs)
+#             if seq in seen_service_sequences:
+#                 continue
+#             seen_service_sequences.add(seq)
+#             solutions.append({
+#                 "transfer": len(legs) > 1,
+#                 "legs": legs,
+#                 "estimated_time_min": round(total_time, 1)
+#             })
+#             continue
 
-        # do not expand beyond allowed transfers
-        if transfers > max_transfers:
-            continue
+#         # do not expand beyond allowed transfers
+#         if transfers > max_transfers:
+#             continue
 
-        # For each outgoing edge from 'stop'
-        for (next_stop, service_key) in route_graph.get(stop, []):
-            svc, direction = service_key
+#         # For each outgoing edge from 'stop'
+#         for (next_stop, service_key) in route_graph.get(stop, []):
+#             svc, direction = service_key
 
-            # compute hop time
-            hop_time = get_edge_time(service_key, stop, next_stop)
+#             # compute hop time
+#             hop_time = get_edge_time(service_key, stop, next_stop)
 
-            # compute transfer penalty and new transfers count
-            if last_service is None or last_service == service_key:
-                new_transfers = transfers
-                transfer_pen = 0.0
-            else:
-                new_transfers = transfers + 1
-                transfer_pen = TRANSFER_PENALTY
+#             # compute transfer penalty and new transfers count
+#             if last_service is None or last_service == service_key:
+#                 new_transfers = transfers
+#                 transfer_pen = 0.0
+#             else:
+#                 new_transfers = transfers + 1
+#                 transfer_pen = TRANSFER_PENALTY
 
-            if new_transfers > max_transfers:
-                continue
+#             if new_transfers > max_transfers:
+#                 continue
 
-            new_total_time = total_time + hop_time + transfer_pen
+#             new_total_time = total_time + hop_time + transfer_pen
 
-            new_legs = [dict(l) for l in legs]  
-            if not new_legs or new_legs[-1]["service"] != svc or new_legs[-1].get("direction") != direction:
+#             new_legs = [dict(l) for l in legs]  
+#             if not new_legs or new_legs[-1]["service"] != svc or new_legs[-1].get("direction") != direction:
                 
-                new_legs.append({
-                    "service": svc,
-                    "direction": direction,
-                    "from": stop,
-                    "to": next_stop,
-                    "stops": 1
-                })
-            else:
+#                 new_legs.append({
+#                     "service": svc,
+#                     "direction": direction,
+#                     "from": stop,
+#                     "to": next_stop,
+#                     "stops": 1
+#                 })
+#             else:
                 
-                new_legs[-1]["to"] = next_stop
-                new_legs[-1]["stops"] = new_legs[-1].get("stops", 1) + 1
+#                 new_legs[-1]["to"] = next_stop
+#                 new_legs[-1]["stops"] = new_legs[-1].get("stops", 1) + 1
 
-            next_state = (next_stop, service_key, new_transfers)
+#             next_state = (next_stop, service_key, new_transfers)
             
-            if next_state in best_time and new_total_time >= best_time[next_state] - 1e-6:
-                continue
+#             if next_state in best_time and new_total_time >= best_time[next_state] - 1e-6:
+#                 continue
 
-            best_time[next_state] = new_total_time
-            heapq.heappush(pq, (new_total_time, next(COUNTER), next_stop, service_key, new_transfers, new_legs))
+#             best_time[next_state] = new_total_time
+#             heapq.heappush(pq, (new_total_time, next(COUNTER), next_stop, service_key, new_transfers, new_legs))
 
-    return solutions
+#     return solutions
 
-def find_direct_routes(origin, destination):
-    """
-    Find direct single-service routes from origin -> destination.
-    Handles repeated stops by choosing the *shortest* valid segment.
-    Also prints debug info for inspection.
-    """
-    results = []
+# def find_direct_routes(origin, destination):
+#     """
+#     Find direct single-service routes from origin -> destination.
+#     Handles repeated stops by choosing the *shortest* valid segment.
+#     Also prints debug info for inspection.
+#     """
+#     results = []
 
-    origin = str(origin).strip()
-    destination = str(destination).strip()
+#     origin = str(origin).strip()
+#     destination = str(destination).strip()
 
-    #print(f"DEBUG find_direct_routes: origin={origin}, dest={destination}")
+#     #print(f"DEBUG find_direct_routes: origin={origin}, dest={destination}")
 
-    for (svc, direction), stops_with_seq in bus_routes_by_service.items():
-        # Sort into correct travel order
-        ordered = sorted(stops_with_seq, key=lambda x: x[1])
-        codes = [s for (s, _) in ordered]
+#     for (svc, direction), stops_with_seq in bus_routes_by_service.items():
+#         # Sort into correct travel order
+#         ordered = sorted(stops_with_seq, key=lambda x: x[1])
+#         codes = [s for (s, _) in ordered]
 
-        # 🔍 DEBUG: show a bit of the route for the service you're testing
-        # (Change "10" to whatever bus you’re testing if needed)
-        #if svc == "10":  # e.g. testing service 10
-            #print(f"DEBUG svc={svc}, dir={direction}, len(codes)={len(codes)}")
-            #print("DEBUG first 20 stops:", codes[:20])
+#         # 🔍 DEBUG: show a bit of the route for the service you're testing
+#         # (Change "10" to whatever bus you’re testing if needed)
+#         #if svc == "10":  # e.g. testing service 10
+#             #print(f"DEBUG svc={svc}, dir={direction}, len(codes)={len(codes)}")
+#             #print("DEBUG first 20 stops:", codes[:20])
 
-        # Must exist in this direction sequence
-        if origin not in codes or destination not in codes:
-            continue
+#         # Must exist in this direction sequence
+#         if origin not in codes or destination not in codes:
+#             continue
 
-        # All positions of origin and destination in this list
-        origin_indices = [i for i, s in enumerate(codes) if s == origin]
-        dest_indices = [i for i, s in enumerate(codes) if s == destination]
+#         # All positions of origin and destination in this list
+#         origin_indices = [i for i, s in enumerate(codes) if s == origin]
+#         dest_indices = [i for i, s in enumerate(codes) if s == destination]
 
-        best_diff = None
-        best_pair = None
+#         best_diff = None
+#         best_pair = None
 
-        # Choose the *closest* forward pair (i < j with minimal j-i)
-        for i in origin_indices:
-            for j in dest_indices:
-                if i < j:
-                    diff = j - i
-                    if best_diff is None or diff < best_diff:
-                        best_diff = diff
-                        best_pair = (i, j)
+#         # Choose the *closest* forward pair (i < j with minimal j-i)
+#         for i in origin_indices:
+#             for j in dest_indices:
+#                 if i < j:
+#                     diff = j - i
+#                     if best_diff is None or diff < best_diff:
+#                         best_diff = diff
+#                         best_pair = (i, j)
 
-        if best_pair is None:
-            # No forward pair in this direction
-            continue
+#         if best_pair is None:
+#             # No forward pair in this direction
+#             continue
 
-        i1, i2 = best_pair
-        segment = codes[i1:i2+1]
-        stops_count = len(segment) - 1
-        eta = stops_count * DEFAULT_HOP_TIME   # 1.5 min per hop
+#         i1, i2 = best_pair
+#         segment = codes[i1:i2+1]
+#         stops_count = len(segment) - 1
+#         eta = stops_count * DEFAULT_HOP_TIME   # 1.5 min per hop
 
-        #print(f"DEBUG direct route found: svc={svc}, dir={direction}, "
-              #f"i1={i1}, i2={i2}, stops={stops_count}, eta={eta}")
+#         #print(f"DEBUG direct route found: svc={svc}, dir={direction}, "
+#               #f"i1={i1}, i2={i2}, stops={stops_count}, eta={eta}")
 
-        results.append({
-            "legs": [{
-                "service": svc,
-                "direction": direction,
-                "from": origin,
-                "to": destination,
-                "stops": stops_count
-            }],
-            "transfers": 0,
-            "estimated_time_min": round(eta, 1)
-        })
+#         results.append({
+#             "legs": [{
+#                 "service": svc,
+#                 "direction": direction,
+#                 "from": origin,
+#                 "to": destination,
+#                 "stops": stops_count
+#             }],
+#             "transfers": 0,
+#             "estimated_time_min": round(eta, 1)
+#         })
 
-    #print(f"DEBUG find_direct_routes: total direct routes found={len(results)}")
-    return results
+#     #print(f"DEBUG find_direct_routes: total direct routes found={len(results)}")
+#     return results
 
-def get_bus_arrivals(stop_code):
-    """
-    Internal helper to fetch live arrivals for a stop from LTA.
-    Returns the same format as /bus_arrivals/<code>.
-    """
-    try:
-        r = requests.get(
-            f"{BASE_URL}/v3/BusArrival?BusStopCode={stop_code}",
-            headers=BUS_HEADERS,
-            timeout=10
-        )
-        data = r.json()
-        now = datetime.now()
+# def get_bus_arrivals(stop_code):
+#     """
+#     Internal helper to fetch live arrivals for a stop from LTA.
+#     Returns the same format as /bus_arrivals/<code>.
+#     """
+#     try:
+#         r = requests.get(
+#             f"{BASE_URL}/v3/BusArrival?BusStopCode={stop_code}",
+#             headers=BUS_HEADERS,
+#             timeout=10
+#         )
+#         data = r.json()
+#         now = datetime.now()
 
-        results = []
-        for s in data.get("Services", []):
-            waits = []
-            for key in ["NextBus", "NextBus2", "NextBus3"]:
-                t = s[key].get("EstimatedArrival")
-                if t:
-                    diff = (datetime.fromisoformat(t.replace("+08:00", "")) - now).total_seconds() / 60
-                    if diff >= 0:
-                        waits.append(round(diff, 1))
-            results.append({
-                "service": s["ServiceNo"],
-                "eta": waits
-            })
+#         results = []
+#         for s in data.get("Services", []):
+#             waits = []
+#             for key in ["NextBus", "NextBus2", "NextBus3"]:
+#                 t = s[key].get("EstimatedArrival")
+#                 if t:
+#                     diff = (datetime.fromisoformat(t.replace("+08:00", "")) - now).total_seconds() / 60
+#                     if diff >= 0:
+#                         waits.append(round(diff, 1))
+#             results.append({
+#                 "service": s["ServiceNo"],
+#                 "eta": waits
+#             })
 
-        return results
+#         return results
 
-    except Exception as e:
-        print("⚠️ get_bus_arrivals error:", e)
-        return []
+#     except Exception as e:
+#         print("⚠️ get_bus_arrivals error:", e)
+#         return []
 
-def is_bus_operating(service, stop_code):
-    """
-    Returns True only if the bus appears in LTA BusArrival result
-    AND the bus has at least one upcoming arrival.
-    """
-    arrivals = get_bus_arrivals(stop_code)
-    if not arrivals:
-        return False
+# def is_bus_operating(service, stop_code):
+#     """
+#     Returns True only if the bus appears in LTA BusArrival result
+#     AND the bus has at least one upcoming arrival.
+#     """
+#     arrivals = get_bus_arrivals(stop_code)
+#     if not arrivals:
+#         return False
 
-    for item in arrivals:
-        if item["service"] == service and item["eta"]:
-            return True
+#     for item in arrivals:
+#         if item["service"] == service and item["eta"]:
+#             return True
 
-    return False
+#     return False
 
-def dijkstra_multi_wrapper(origin, destination):
+# def dijkstra_multi_wrapper(origin, destination):
 
-    # 1. Always fetch direct routes first
-    direct = find_direct_routes(origin, destination)
+#     # 1. Always fetch direct routes first
+#     direct = find_direct_routes(origin, destination)
 
-    dijkstra_results = dijkstra_multi(origin, destination, route_graph=ROUTE_GRAPH, max_transfers=5)
+#     dijkstra_results = dijkstra_multi(origin, destination, route_graph=ROUTE_GRAPH, max_transfers=5)
 
-    # Merge the two result lists
-    routes = direct + dijkstra_results
+#     # Merge the two result lists
+#     routes = direct + dijkstra_results
 
-    # ---- Now normalize routes (same as earlier fix) ----
-    normalized = [] 
+#     # ---- Now normalize routes (same as earlier fix) ----
+#     normalized = [] 
 
-    for r in routes:
-        if "legs" in r:
-            legs = r["legs"]
-            transfers = r.get("transfers", len(legs) - 1)
-            eta = r.get("estimated_time_min", 9999)
-        else:
-            legs = [{
-                "service": r["service"],
-                "from": r["from"],
-                "to": r["to"],
-                "stops": r["stops"]
-            }]
-            transfers = 0
-            eta = r["estimated_time_min"]
+#     for r in routes:
+#         if "legs" in r:
+#             legs = r["legs"]
+#             transfers = r.get("transfers", len(legs) - 1)
+#             eta = r.get("estimated_time_min", 9999)
+#         else:
+#             legs = [{
+#                 "service": r["service"],
+#                 "from": r["from"],
+#                 "to": r["to"],
+#                 "stops": r["stops"]
+#             }]
+#             transfers = 0
+#             eta = r["estimated_time_min"]
 
-        normalized.append({
-            "legs": legs,
-            "transfers": transfers,
-            "estimated_time_min": eta
-        })
+#         normalized.append({
+#             "legs": legs,
+#             "transfers": transfers,
+#             "estimated_time_min": eta
+#         })
 
-    routes = normalized
+#     routes = normalized
 
-    # --- FILTER OUT ROUTES WHERE ANY BUS LEG IS NOT OPERATING ---
-    filtered = []
-    for r in routes:
-        all_legs_valid = True
+#     # --- FILTER OUT ROUTES WHERE ANY BUS LEG IS NOT OPERATING ---
+#     filtered = []
+#     for r in routes:
+#         all_legs_valid = True
 
-        for leg in r["legs"]:
-            svc = leg["service"]
-            from_stop = leg["from"]
+#         for leg in r["legs"]:
+#             svc = leg["service"]
+#             from_stop = leg["from"]
 
-            # If ANY leg is not operating, discard entire route
-            if not is_bus_operating(svc, from_stop):
-                all_legs_valid = False
-                break
+#             # If ANY leg is not operating, discard entire route
+#             if not is_bus_operating(svc, from_stop):
+#                 all_legs_valid = False
+#                 break
 
-        if all_legs_valid:
-            filtered.append(r)
+#         if all_legs_valid:
+#             filtered.append(r)
 
-    routes = filtered
+#     routes = filtered
 
-    if not routes:
-        return []
+#     if not routes:
+#         return []
 
-    # ---- Option 1: Fewest transfers ----
-    fewest_transfers = sorted(routes, key=lambda r: (r["transfers"], r["estimated_time_min"]))[0]
+#     # ---- Option 1: Fewest transfers ----
+#     fewest_transfers = sorted(routes, key=lambda r: (r["transfers"], r["estimated_time_min"]))[0]
 
-    # ---- Option 2 & 3: Fastest ETA ----
-    fastest = sorted(routes, key=lambda r: r["estimated_time_min"])
+#     # ---- Option 2 & 3: Fastest ETA ----
+#     fastest = sorted(routes, key=lambda r: r["estimated_time_min"])
 
-    # Remove Option 1 from fastest if duplicate
-    fastest = [r for r in fastest if r is not fewest_transfers]
+#     # Remove Option 1 from fastest if duplicate
+#     fastest = [r for r in fastest if r is not fewest_transfers]
 
-    # Pick fastest 2 remaining
-    fastest_top2 = fastest[:2]
+#     # Pick fastest 2 remaining
+#     fastest_top2 = fastest[:2]
 
-    # Final output ordering
-    final_output = [fewest_transfers] + fastest_top2
+#     # Final output ordering
+#     final_output = [fewest_transfers] + fastest_top2
 
-    return final_output
+#     return final_output
 
 # END OF ROUTING ENGINE
 
-@app.route("/api/route", methods=["POST"])
-def get_route():
-    data = request.get_json()
-    origin = data.get("origin")
-    destination = data.get("destination")
+# @app.route("/api/route", methods=["POST"])
+# def get_route():
+#     data = request.get_json()
+#     origin = data.get("origin")
+#     destination = data.get("destination")
 
-    if not origin or not destination:
-        return jsonify({"error": "Missing origin or destination"}), 400
+#     if not origin or not destination:
+#         return jsonify({"error": "Missing origin or destination"}), 400
 
-    results = dijkstra_multi_wrapper(origin, destination)
+#     results = dijkstra_multi_wrapper(origin, destination)
 
-    if not results:
-        return jsonify({"message": "No routes found"}), 404
+#     if not results:
+#         return jsonify({"message": "No routes found"}), 404
 
-    return jsonify({
-        "origin": origin,
-        "destination": destination,
-        "routes": results
-    })
+#     return jsonify({
+#         "origin": origin,
+#         "destination": destination,
+#         "routes": results
+#     })
 
 @app.route("/bus_arrivals/<code>")
 def bus_arrivals(code):
@@ -1148,6 +1146,7 @@ def get_bus_route(service_no, bus_stop_code):
         
         print(f"Found {len(all_routes)} routes for service {service_no}")
         print(all_routes)
+        
         if not all_routes:
             conn.close()
             return jsonify({"error": "Route not found"}), 404
@@ -1286,9 +1285,8 @@ if __name__ == "__main__":
         load_bus_routes()
         
         bus_routes_by_service = build_bus_routes_cache()
-        ROUTE_GRAPH = build_route_graph_from_cache(bus_routes_by_service)
+        # ROUTE_GRAPH = build_route_graph_from_cache(bus_routes_by_service)
 
-        # threading.Thread(target=load_bus_stops, daemon=True).start()
         
         # Start background threads
         threading.Thread(target=background_bus_collector, daemon=True).start()
