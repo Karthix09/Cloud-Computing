@@ -3,66 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🤖 Transport Buddy Chatbot</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/chatbot.css') }}">
+    <title>Transport Buddy – AI Assistant</title>
+    
+    <!-- Chatbot Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='chatbot.css') }}">
 </head>
+
 <body>
-    <!-- Add Navbar -->
+    <!-- ========================
+         HAMBURGER SIDEBAR
+         (navbar.js injection)
+    ========================= -->
     <script type="module">
-        import { createSidebar } from "/static/navbar.js"; 
+        import { createSidebar } from "{{ url_for('static', filename='navbar.js') }}";
         createSidebar("chatbot");
     </script>
 
+    <!-- Main Content -->
     <div class="content">
-        <div class="chat-container">
+        <div class="chatbot-container">
+
             <!-- Header -->
-            <div class="chat-header">
-                <div class="header-content">
-                    <div class="bot-avatar">🤖</div>
-                    <div class="header-text">
-                        <h1>Transport Buddy</h1>
-                        <p class="status">● Online</p>
-                    </div>
-                </div>
-                <button class="help-btn" onclick="sendMessage('help')">❓ Help</button>
+            <div class="chatbot-header">
+                <h2>🤖 Transport Buddy</h2>
+                <p class="subtitle">Your AI Assistant for Singapore Transport</p>
             </div>
 
             <!-- Messages Area -->
-            <div class="chat-messages" id="chatMessages">
-                <!-- Welcome message -->
-                <div class="message bot-message">
-                    <div class="message-avatar">🤖</div>
-                    <div class="message-content">
-                        <p>👋 Hello! I'm your Transport Buddy!</p>
-                        <p>I can help you check bus arrival times in Singapore.</p>
-                        <p>Try asking: <strong>"Bus at Raffles Place"</strong> or <strong>"Next bus at Orchard Road"</strong></p>
+            <div class="chatbot-messages" id="chatMessages">
+                <div class="bot-message-container">
+                    <div class="message-bubble bot-message">
+                        <p>👋 <strong>Hello! I'm Transport Buddy.</strong></p>
+                        <p>I can help you with:</p>
+                        <ul>
+                            <li>🔍 Finding bus stops near you</li>
+                            <li>⏰ Checking real-time bus arrivals</li>
+                            <li>🚌 Planning routes between locations</li>
+                            <li>📍 Using your saved locations (home, work, etc.)</li>
+                        </ul>
+                        <p><strong>Try asking:</strong></p>
+                        <ul>
+                            <li>"How to get from home to orchard?"</li>
+                            <li>"Bus arrivals at 01012"</li>
+                            <li>"Route from clementi to jurong east"</li>
+                            <li>"Find bus stops near me"</li>
+                        </ul>
                     </div>
                 </div>
             </div>
 
-            <!-- Quick Actions -->
-            <div class="quick-actions" id="quickActions">
-                <button onclick="sendQuickMessage('bus stops near me')" class="quick-btn">
-                    📍 Find Nearby Stops
-                </button>
+            <!-- Input Area -->
+            <div class="chatbot-input-area">
+                
+                <!-- Quick Action Buttons -->
+                <div class="quick-actions">
+                    <button class="btn-quick-action" id="btnNearby">
+                        📍 Nearby Stops
+                    </button>
+                </div>
+
+                <!-- Text Input -->
+                <div class="input-group">
+                    <input 
+                        type="text" 
+                        id="userInput" 
+                        class="chatbot-input" 
+                        placeholder="Try: 'how to get from home to orchard'" 
+                        autocomplete="off"
+                    >
+                    <button class="btn-send" id="btnSend">Send</button>
+                </div>
             </div>
 
-            <!-- Input Area -->
-            <div class="chat-input-container">
-                <input 
-                    type="text" 
-                    id="userInput" 
-                    class="chat-input" 
-                    placeholder="Ask about bus arrivals..."
-                    autocomplete="off"
-                >
-                <button class="send-btn" onclick="sendMessage()">
-                    <span class="send-icon">➤</span>
-                </button>
+            <!-- Typing Indicator -->
+            <div class="typing-indicator" id="typingIndicator" style="display:none;">
+                <span></span><span></span><span></span>
             </div>
+
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/chatbot.js') }}"></script>
+    <!-- Chatbot JavaScript -->
+    <script src="{{ url_for('static', filename='chatbot.js') }}"></script>
 </body>
 </html>

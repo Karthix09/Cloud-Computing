@@ -1,671 +1,716 @@
+# chatbot.py - UPDATED with Route Planning Feature
+
+from flask import Blueprint, render_template, request, jsonify, session
+from functools import wraps
 import os
+import json
+import logging
+import requests
 import re
-import sqlite3
-from flask import Blueprint, render_template, request, jsonify
-from datetime import datetime
-from collections import defaultdict
 
-user_sessions = defaultdict(dict)
+# Import database and auth
+from database import get_db_connection, IS_PRODUCTION
+from auth import login_required
 
-# Configuration
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_FILE = os.path.join(BASE_DIR, "database/bus_data.db")
+# ---- LEX CONFIG ----
+LEX_BOT_ID = os.environ.get("LEX_BOT_ID")
+LEX_BOT_ALIAS_ID = os.environ.get("LEX_BOT_ALIAS_ID")
+LEX_LOCALE_ID = os.environ.get("LEX_LOCALE_ID", "en_US")
+AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 
-chatbot_bp = Blueprint('chatbot', __name__)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
-# ============================================
-# CHATBOT ROUTES
-# ============================================
+# ---- LEX CLIENT ----
+try:
+    import boto3
+    lex_client = boto3.client("lexv2-runtime", region_name=AWS_REGION)
+except ImportError:
+    logger.warning("boto3 not installed, Lex will not work.")
+    lex_client = None
 
-@chatbot_bp.route('/chatbot')
-def chatbot_page():
-    """Chatbot interface page"""
-    return render_template('chatbot.html')
+# ---- BLUEPRINT ----
+chatbot_bp = Blueprint("chatbot", __name__)
 
+# ============================
+# HELPER FUNCTIONS
+# ============================
 
-@chatbot_bp.route('/api/chat', methods=['POST'])
-def chat():
-    """Handle chatbot messages"""
-    data = request.json
-    user_message = data.get('message', '').strip()
-    session_id = data.get('session_id', 'default')
-    
-    if not user_message:
-        return jsonify({
-            'response': "Please type a message!",
-            'type': 'error'
-        })
-    
-    # Get user's session data
-    session_data = user_sessions[session_id]
-    
-    # Process the message with context
-    response = process_message(user_message, session_data)
-    
-    # Update session if response contains stop info
-    if response.get('stop_code'):
-        session_data['last_stop_code'] = response['stop_code']
-        session_data['last_stop_name'] = response.get('stop_name')
-    
-    return jsonify(response)
-
-@chatbot_bp.route('/api/bus-stops/search', methods=['GET'])
-def search_bus_stops():
-    """Search bus stops by name or road"""
-    query = request.args.get('query', '').strip()
-    
-    if not query:
-        return jsonify([])
-    
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    # Search in description and road
-    search_term = f"%{query}%"
-    cursor.execute("""
-        SELECT code, description, road, lat, lon
-        FROM bus_stops
-        WHERE LOWER(description) LIKE LOWER(?)
-           OR LOWER(road) LIKE LOWER(?)
-        LIMIT 10
-    """, (search_term, search_term))
-    
-    results = cursor.fetchall()
-    conn.close()
-    
-    stops = []
-    for row in results:
-        stops.append({
-            'code': row[0],
-            'description': row[1],
-            'road': row[2],
-            'lat': row[3],
-            'lon': row[4]
-        })
-    
-    return jsonify(stops)
-
-
-@chatbot_bp.route('/api/bus-arrivals/<bus_stop_code>')
-def get_bus_arrivals_api(bus_stop_code):
-    """Get bus arrivals for a specific stop"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    # Get stop info
-    cursor.execute("SELECT description, road FROM bus_stops WHERE code = ?", (bus_stop_code,))
-    stop_info = cursor.fetchone()
-    
-    if not stop_info:
+def get_user_location_by_label(user_id, label):
+    """
+    Get user's saved location by label (e.g., 'home', 'work', 'school')
+    Returns: dict with {label, lat, lon, address} or None
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Search by label (case-insensitive)
+        if IS_PRODUCTION:
+            cursor.execute("""
+                SELECT label, latitude, longitude, address, postal_code
+                FROM locations
+                WHERE user_id = %s AND LOWER(label) = LOWER(%s)
+                LIMIT 1
+            """, (user_id, label))
+        else:
+            cursor.execute("""
+                SELECT label, latitude, longitude, address, postal_code
+                FROM locations
+                WHERE user_id = ? AND LOWER(label) = LOWER(?)
+                LIMIT 1
+            """, (user_id, label))
+        
+        row = cursor.fetchone()
+        cursor.close()
         conn.close()
-        return jsonify({'error': 'Bus stop not found'}), 404
-    
-    # Get latest arrivals
-    cursor.execute("""
-        SELECT MAX(timestamp) FROM bus_arrivals WHERE stop_code = ?
-    """, (bus_stop_code,))
-    latest_time = cursor.fetchone()[0]
-    
-    if not latest_time:
-        conn.close()
-        return jsonify({
-            'stop_code': bus_stop_code,
-            'stop_name': stop_info[0],
-            'road': stop_info[1],
-            'arrivals': []
-        })
-    
-    # Get all arrivals at latest timestamp
-    cursor.execute("""
-        SELECT service, eta_min, bus_type
-        FROM bus_arrivals
-        WHERE stop_code = ? AND timestamp = ?
-        ORDER BY service ASC, eta_min ASC
-    """, (bus_stop_code, latest_time))
-    
-    arrivals_raw = cursor.fetchall()
-    conn.close()
-    
-    # Group by service
-    arrivals_dict = {}
-    for service, eta, bus_type in arrivals_raw:
-        if service not in arrivals_dict:
-            arrivals_dict[service] = {
-                'service': service,
-                'eta': [],
-                'type': bus_type
+        
+        if row:
+            return {
+                "label": row["label"] if IS_PRODUCTION else row[0],
+                "latitude": float(row["latitude"] if IS_PRODUCTION else row[1]),
+                "longitude": float(row["longitude"] if IS_PRODUCTION else row[2]),
+                "address": row["address"] if IS_PRODUCTION else row[3],
+                "postal_code": row["postal_code"] if IS_PRODUCTION else row[4]
             }
-        arrivals_dict[service]['eta'].append(round(eta, 1))
-    
-    return jsonify({
-        'stop_code': bus_stop_code,
-        'stop_name': stop_info[0],
-        'road': stop_info[1],
-        'arrivals': list(arrivals_dict.values())
-    })
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting user location: {e}")
+        return None
 
-@chatbot_bp.route('/api/bus-stops/nearby', methods=['POST'])
-def get_nearby_bus_stops():
-    """Get bus stops near user's location"""
-    import math
-    
-    data = request.json
-    user_lat = data.get('lat')
-    user_lon = data.get('lon')
-    limit = data.get('limit', 5)
-    max_distance = data.get('max_distance', 1000)  # Changed from 2000 to 1000 (1km)
-    
-    if not user_lat or not user_lon:
-        return jsonify({'error': 'Location required'}), 400
-    
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    # Get bus stops with valid coordinates (Singapore bounds)
-    cursor.execute("""
-        SELECT code, description, road, lat, lon 
-        FROM bus_stops
-        WHERE lat IS NOT NULL 
-          AND lon IS NOT NULL
-          AND lat BETWEEN 1.1 AND 1.5
-          AND lon BETWEEN 103.6 AND 104.1
-    """)
-    all_stops = cursor.fetchall()
-    conn.close()
-    
-    def haversine_distance(lat1, lon1, lat2, lon2):
-        """Calculate distance between two points in meters"""
-        R = 6371000  # Earth's radius in meters
-        
-        lat1_rad = math.radians(lat1)
-        lat2_rad = math.radians(lat2)
-        delta_lat = math.radians(lat2 - lat1)
-        delta_lon = math.radians(lon2 - lon1)
-        
-        a = math.sin(delta_lat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon/2)**2
-        c = 2 * math.asin(math.sqrt(a))
-        
-        return R * c
-    
-    # Calculate distances
-    stops_with_distance = []
-    for stop in all_stops:
-        code, description, road, lat, lon = stop
-        distance = haversine_distance(user_lat, user_lon, lat, lon)
-        
-        # Only include stops within 1km (1000 meters)
-        if distance <= max_distance:
-            stops_with_distance.append({
-                'code': code,
-                'description': description,
-                'road': road,
-                'lat': lat,
-                'lon': lon,
-                'distance': round(distance, 1)
-            })
-    
-    # Sort by distance
-    stops_with_distance.sort(key=lambda x: x['distance'])
-    nearest_stops = stops_with_distance[:limit]
-    
-    return jsonify(nearest_stops)
 
-# ============================================
-# CHATBOT LOGIC
-# ============================================
-
-def process_message(message, session_data=None):
-    """Process user message and return appropriate response"""
-    if session_data is None:
-        session_data = {}
-    
-    message_lower = message.lower()
-    
-    # Greeting
-    if any(word in message_lower for word in ['hello', 'hi', 'hey', 'start']):
-        return {
-            'response': "👋 Hello! I'm your Transport Buddy!\n\n"
-                       "I can help you with:\n"
-                       "• 🚌 Bus arrival times\n"
-                       "• 🔍 Finding bus stops\n"
-                       "• 📍 Bus stops near you\n\n",
-            'type': 'greeting'
+def geocode_location(location_name):
+    """
+    Convert location name to coordinates using OneMap API (Singapore)
+    Returns: dict with {lat, lon, address} or None
+    """
+    try:
+        # Use Singapore OneMap API for geocoding
+        url = "https://www.onemap.gov.sg/api/common/elastic/search"
+        params = {
+            "searchVal": location_name,
+            "returnGeom": "Y",
+            "getAddrDetails": "Y"
         }
-    
-    # Location-based query
-    if any(phrase in message_lower for phrase in ['near me', 'nearby', 'closest', 'nearest', 'my location']):
-        return {
-            'response': "📍 I'll find bus stops near you!\n\n"
-                       "Please allow location access when prompted by your browser.",
-            'type': 'request_location',
-            'action': 'get_nearby_stops' 
-        }
-    
-    # Check for specific bus number query (follow-up context)
-    bus_number_match = re.search(r'\b(bus\s+)?(\d{1,3}[A-Z]?)\b', message_lower)
-    if bus_number_match:
-        bus_number = bus_number_match.group(2).upper()
         
-        # Check if we have context about the last stop
-        if session_data.get('last_stop_code'):
-            last_stop = session_data['last_stop_code']
-            last_stop_name = session_data.get('last_stop_name', last_stop)
+        response = requests.get(url, params=params, timeout=5)
+        data = response.json()
+        
+        if data.get("found", 0) > 0:
+            result = data["results"][0]
+            return {
+                "latitude": float(result["LATITUDE"]),
+                "longitude": float(result["LONGITUDE"]),
+                "address": result["ADDRESS"],
+                "postal_code": result.get("POSTAL", "")
+            }
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error geocoding location: {e}")
+        return None
+
+
+def find_nearest_bus_stop(latitude, longitude):
+    """
+    Find nearest bus stop to given coordinates
+    Returns: dict with {code, description, distance} or None
+    """
+    try:
+        from database import get_bus_db_connection
+        import math
+        
+        conn = get_bus_db_connection()
+        cursor = conn.cursor()
+        
+        # Get all bus stops
+        if IS_PRODUCTION:
+            cursor.execute("SELECT code, description, lat, lon FROM bus_stops")
+        else:
+            cursor.execute("SELECT code, description, lat, lon FROM bus_stops")
+        
+        stops = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        if not stops:
+            return None
+        
+        # Calculate distances using Haversine formula
+        def haversine(lat1, lon1, lat2, lon2):
+            R = 6371  # Earth radius in km
+            dlat = math.radians(lat2 - lat1)
+            dlon = math.radians(lon2 - lon1)
+            a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+            c = 2 * math.asin(math.sqrt(a))
+            return R * c
+        
+        # Find nearest stop
+        nearest = None
+        min_distance = float('inf')
+        
+        for stop in stops:
+            if IS_PRODUCTION:
+                stop_lat = float(stop["lat"])
+                stop_lon = float(stop["lon"])
+                stop_code = stop["code"]
+                stop_desc = stop["description"]
+            else:
+                stop_lat = float(stop[2])
+                stop_lon = float(stop[3])
+                stop_code = stop[0]
+                stop_desc = stop[1]
             
-            # Check if this bus serves that stop
-            return check_specific_bus_at_stop(bus_number, last_stop, last_stop_name)
-    
-    # Bus arrival query
-    if any(word in message_lower for word in ['bus', 'arrival', 'next', 'when', 'timing']):
-        return handle_bus_query(message)
-    
-    # Help
-    if 'help' in message_lower:
-        return {
-            'response': "🤖 Here's what I can do:\n\n"
-                       "🚌 **Check Bus Arrivals:**\n"
-                       "• 'Bus at [stop name]'\n"
-                       "• 'When is bus 75 at [stop name] coming?'\n\n"
-                       "📍 **Find Nearby Stops:**\n"
-                       "• 'Bus stops near me'\n"
-                       "💬 **Follow-up Questions:**\n"
-                       "• After checking a stop, ask 'What about bus 167?'\n\n"
-                       "💡 **Tips:**\n"
-                       "• You can search by bus stop name or road\n"
-                       "• I remember your last searched stop for follow-ups",
-            'type': 'help'
-        }
-    
-    # Default response
-    return {
-        'response': "🤔 I'm not sure how to help with that.\n\n"
-                   "Try asking:\n"
-                   "• 'Bus stops near me'\n"
-                   "• 'Bus at [location name]'\n"
-                   "• Type 'help' for more options",
-        'type': 'unknown'
-    }
+            distance = haversine(latitude, longitude, stop_lat, stop_lon)
+            
+            if distance < min_distance:
+                min_distance = distance
+                nearest = {
+                    "code": stop_code,
+                    "description": stop_desc,
+                    "distance": round(distance * 1000, 0)  # Convert to meters
+                }
+        
+        return nearest
+        
+    except Exception as e:
+        logger.error(f"Error finding nearest bus stop: {e}")
+        return None
 
 
-def handle_bus_query(message):
-    """Handle bus arrival queries"""
-    import re
-    
-    message_lower = message.lower()
-    
-    # Check if specific bus stop code (5 digits) mentioned
-    bus_stop_match = re.search(r'\b(\d{5})\b', message)
-    
-    if bus_stop_match:
-        bus_stop_code = bus_stop_match.group(1)
-        return get_bus_arrivals(bus_stop_code)
-    
-    # Extract location name (everything after "at", "near", "from")
-    location_patterns = [
-        r'at\s+(.+?)(?:\?|$)',
-        r'near\s+(.+?)(?:\?|$)',
-        r'from\s+(.+?)(?:\?|$)',
-        r'in\s+(.+?)(?:\?|$)',
+def get_bus_route_between_stops(origin_code, destination_code):
+    """
+    Get bus routes between two stops using your existing routing engine
+    Returns: list of routes or None
+    """
+    try:
+        # Import your routing function from app.py
+        # You'll need to make this available
+        from app import dijkstra_multi_wrapper
+        
+        routes = dijkstra_multi_wrapper(origin_code, destination_code)
+        return routes
+        
+    except Exception as e:
+        logger.error(f"Error getting bus routes: {e}")
+        return None
+
+
+def parse_route_query(message):
+    """
+    Parse user message to extract origin and destination
+    Patterns:
+    - "how to get from X to Y"
+    - "route from X to Y"
+    - "directions from X to Y"
+    - "from X to Y"
+    Returns: dict with {origin, destination} or None
+    """
+    patterns = [
+        r"(?:how (?:to|do i) get |route |directions? |go )?from\s+(.+?)\s+to\s+(.+)",
+        r"(.+?)\s+to\s+(.+)"
     ]
     
-    location = None
-    for pattern in location_patterns:
-        match = re.search(pattern, message_lower)
+    message_lower = message.lower().strip()
+    
+    for pattern in patterns:
+        match = re.search(pattern, message_lower, re.IGNORECASE)
         if match:
-            location = match.group(1).strip()
-            break
-    
-    # If no location found, try to extract meaningful words
-    if not location:
-        # Remove common words
-        words = message_lower.split()
-        stop_words = ['when', 'is', 'the', 'next', 'bus', 'at', 'coming', 'arriving', 'arrival', 'timing', 'timings']
-        location_words = [w for w in words if w not in stop_words and len(w) > 2]
-        if location_words:
-            location = ' '.join(location_words)
-    
-    if not location:
-        return {
-            'response': "🤔 I couldn't find a location in your message.\n\n"
-                       "Try asking like this:\n"
-                       "• 'Bus at Raffles Place'\n"
-                       "• 'Next bus at Orchard Road'\n"
-                       "• 'Bus timing at stop 01012'",
-            'type': 'clarification',
-            'needs_location': True
-        }
-    
-    # Search for bus stops
-    return search_and_present_stops(location)
-
-
-def search_and_present_stops(location):
-    """Search for bus stops and present results"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    # First try: exact phrase match
-    search_term = f"%{location}%"
-    cursor.execute("""
-        SELECT code, description, road
-        FROM bus_stops
-        WHERE LOWER(description) LIKE LOWER(?)
-           OR LOWER(road) LIKE LOWER(?)
-        LIMIT 20
-    """, (search_term, search_term))
-    
-    results = cursor.fetchall()
-    
-    # Second try: search by individual words and rank by relevance
-    if not results:
-        words = [w for w in location.split() if len(w) > 2]
-        
-        if words:
-            # Search for stops containing any of the words
-            conditions = []
-            params = []
-            
-            for word in words:
-                conditions.append("LOWER(description) LIKE LOWER(?)")
-                conditions.append("LOWER(road) LIKE LOWER(?)")
-                params.extend([f"%{word}%", f"%{word}%"])
-            
-            query = f"""
-                SELECT code, description, road
-                FROM bus_stops
-                WHERE {' OR '.join(conditions)}
-            """
-            cursor.execute(query, params)
-            all_results = cursor.fetchall()
-            
-            # Rank by how many words match
-            scored_results = []
-            for row in all_results:
-                code, desc, road = row
-                score = 0
-                for word in words:
-                    if word.lower() in desc.lower():
-                        score += 2  # Description match worth more
-                    if word.lower() in road.lower():
-                        score += 1
-                scored_results.append((score, row))
-            
-            # Sort by score (highest first) and take top 20
-            scored_results.sort(reverse=True, key=lambda x: x[0])
-            results = [row for score, row in scored_results[:20]]
-    
-    conn.close()
-    
-    if not results:
-        return {
-            'response': f"❌ Sorry, I couldn't find any bus stops matching '{location}'.\n\n"
-                       "💡 Try:\n"
-                       "• Using the full road name (e.g., 'Orchard Road')\n"
-                       "• Using the bus stop code if you know it\n"
-                       "• Being more specific (e.g., 'Raffles Quay' or 'Raffles Hotel')\n"
-                       "• Searching for just one word (e.g., 'Raffles')",
-            'type': 'not_found'
-        }
-    
-    if len(results) == 1:
-        # Only one match - show arrivals directly
-        bus_stop_code = results[0][0]
-        return get_bus_arrivals(bus_stop_code)
-    
-    # Multiple matches - ask user to choose
-    # Limit to 10 for better UX
-    results = results[:10]
-    
-    return {
-        'response': f"🔍 I found {len(results)} bus stops matching '{location}':\n\n"
-                   "Please choose one by clicking below:",
-        'type': 'multiple_matches',
-        'stops': [
-            {
-                'code': row[0],
-                'description': row[1],
-                'road': row[2]
-            } for row in results
-        ]
-    }
-
-def get_bus_arrivals(bus_stop_code):
-    """Get bus arrivals for a specific stop"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    # Get stop info
-    cursor.execute("SELECT description, road FROM bus_stops WHERE code = ?", (bus_stop_code,))
-    stop_info = cursor.fetchone()
-    
-    if not stop_info:
-        conn.close()
-        return {
-            'response': f"❌ Bus stop {bus_stop_code} not found in database.",
-            'type': 'error'
-        }
-    
-    stop_name = stop_info[0]
-    road = stop_info[1]
-    
-    # Get latest timestamp
-    cursor.execute("""
-        SELECT MAX(timestamp) FROM bus_arrivals WHERE stop_code = ?
-    """, (bus_stop_code,))
-    latest_time_result = cursor.fetchone()[0]
-    
-    if not latest_time_result:
-        conn.close()
-        return {
-            'response': f"🚏 **{stop_name}** ({bus_stop_code})\n"
-                       f"📍 {road}\n\n"
-                       f"❌ No bus arrival data available at the moment.",
-            'type': 'no_data',
-            'stop_code': bus_stop_code,
-            'stop_name': stop_name
-        }
-    
-    # Get all arrivals within 2 minutes of the latest timestamp
-    # This handles cases where different buses have slightly different timestamps
-    from datetime import datetime, timedelta
-    
-    try:
-        latest_time = datetime.fromisoformat(latest_time_result)
-        time_threshold = (latest_time - timedelta(minutes=2)).isoformat()
-    except:
-        # Fallback: just use the latest timestamp
-        time_threshold = latest_time_result
-    
-    cursor.execute("""
-        SELECT service, eta_min, bus_type, timestamp
-        FROM bus_arrivals
-        WHERE stop_code = ? 
-          AND timestamp >= ?
-        ORDER BY service ASC, timestamp DESC, eta_min ASC
-    """, (bus_stop_code, time_threshold))
-    
-    arrivals_raw = cursor.fetchall()
-    conn.close()
-    
-    if not arrivals_raw:
-        return {
-            'response': f"🚏 **{stop_name}** ({bus_stop_code})\n"
-                       f"📍 {road}\n\n"
-                       f"❌ No buses currently arriving.",
-            'type': 'no_arrivals',
-            'stop_code': bus_stop_code,
-            'stop_name': stop_name
-        }
-    
-    # Helper function to convert bus type codes
-    def format_bus_type(bus_type):
-        """Convert bus type code to readable format with emoji"""
-        if not bus_type:
-            return ""
-        
-        bus_type_upper = bus_type.upper()
-        
-        if bus_type_upper == 'SD':
-            return "🚌 Single Decker"
-        elif bus_type_upper == 'DD':
-            return "🚍 Double Decker"
-        elif bus_type_upper == 'BD':
-            return "🚐 Bendy Bus"
-        else:
-            return f"🚌 {bus_type}"
-    
-    # Group by service number (take most recent record for each service)
-    arrivals_dict = {}
-    for service, eta, bus_type, timestamp in arrivals_raw:
-        if service not in arrivals_dict:
-            arrivals_dict[service] = {
-                'service': service,
-                'eta': [],
-                'type': bus_type,
-                'timestamp': timestamp
+            return {
+                "origin": match.group(1).strip(),
+                "destination": match.group(2).strip()
             }
-        arrivals_dict[service]['eta'].append(eta)
     
-    # Format response
-    response_text = f"🚏 **{stop_name}** ({bus_stop_code})\n"
-    response_text += f"📍 {road}\n\n"
-    response_text += "🚌 **Bus Arrivals:**\n\n"
-    
-    for service_data in sorted(arrivals_dict.values(), key=lambda x: x['service']):
-        service = service_data['service']
-        etas = service_data['eta']
-        bus_type = service_data['type']
-        
-        # Format ETAs
-        formatted_etas = []
-        for eta in etas[:3]:  # Show max 3 arrivals per bus
-            if eta < 1:
-                formatted_etas.append("**Arr**")
-            elif eta == 1:
-                formatted_etas.append("1 min")
-            else:
-                formatted_etas.append(f"{int(eta)} min")
-        
-        eta_text = " • ".join(formatted_etas)
-        bus_type_text = format_bus_type(bus_type)
-        
-        # Display bus with type
-        response_text += f"**Bus {service}** - {bus_type_text}\n"
-        response_text += f"⏱️ {eta_text}\n\n"
-    
-    # Use the latest timestamp for display
-    try:
-        timestamp_obj = datetime.fromisoformat(latest_time_result)
-        formatted_time = timestamp_obj.strftime('%I:%M %p')
-    except:
-        formatted_time = latest_time_result
-    
-    response_text += f"🕒 Last updated: {formatted_time}"
-    
-    return {
-        'response': response_text,
-        'type': 'arrivals',
-        'stop_code': bus_stop_code,
-        'stop_name': stop_name,
-        'arrivals': list(arrivals_dict.values())
-    }
+    return None
 
-def check_specific_bus_at_stop(bus_number, stop_code, stop_name):
-    """Check if a specific bus serves a particular stop"""
-    import re
-    
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    # Get latest timestamp for this stop
-    cursor.execute("""
-        SELECT MAX(timestamp) FROM bus_arrivals WHERE stop_code = ?
-    """, (stop_code,))
-    latest_time_result = cursor.fetchone()[0]
-    
-    if not latest_time_result:
+
+# ============================
+# FRONTEND CHATBOT PAGE ROUTE
+# ============================
+@chatbot_bp.route("/chatbot")
+@login_required
+def chatbot_page():
+    return render_template("chatbot.html")
+
+
+# ======================================
+# ROUTE PLANNING ENDPOINT (NEW)
+# ======================================
+@chatbot_bp.route("/api/chatbot/route-planning", methods=["POST"])
+@login_required
+def route_planning():
+    """
+    Handle route planning requests
+    Accepts: { "message": "how to get from home to orchard" }
+    Returns: route suggestions with bus services
+    """
+    try:
+        data = request.get_json() or {}
+        user_message = data.get("message", "")
+        user_id = session.get("user_id")
+        
+        if not user_message:
+            return jsonify({"error": "Message is required"}), 400
+        
+        # Parse the query
+        parsed = parse_route_query(user_message)
+        if not parsed:
+            return jsonify({
+                "error": "Could not understand route query. Try: 'how to get from home to orchard'"
+            }), 400
+        
+        origin_name = parsed["origin"]
+        dest_name = parsed["destination"]
+        
+        logger.info(f"Route planning: {origin_name} → {dest_name}")
+        
+        # Step 1: Resolve origin
+        origin_coords = None
+        
+        # Check if it's a saved location
+        origin_location = get_user_location_by_label(user_id, origin_name)
+        if origin_location:
+            origin_coords = origin_location
+            origin_name = origin_location.get("label", origin_name)
+        else:
+            # Geocode the location
+            origin_coords = geocode_location(origin_name)
+        
+        if not origin_coords:
+            return jsonify({
+                "error": f"Could not find location: {origin_name}"
+            }), 404
+        
+        # Step 2: Resolve destination
+        dest_coords = None
+        
+        # Check if it's a saved location
+        dest_location = get_user_location_by_label(user_id, dest_name)
+        if dest_location:
+            dest_coords = dest_location
+            dest_name = dest_location.get("label", dest_name)
+        else:
+            # Geocode the location
+            dest_coords = geocode_location(dest_name)
+        
+        if not dest_coords:
+            return jsonify({
+                "error": f"Could not find location: {dest_name}"
+            }), 404
+        
+        # Step 3: Find nearest bus stops
+        origin_stop = find_nearest_bus_stop(
+            origin_coords["latitude"],
+            origin_coords["longitude"]
+        )
+        
+        dest_stop = find_nearest_bus_stop(
+            dest_coords["latitude"],
+            dest_coords["longitude"]
+        )
+        
+        if not origin_stop or not dest_stop:
+            return jsonify({
+                "error": "Could not find nearby bus stops"
+            }), 404
+        
+        # Step 4: Get bus routes
+        routes = get_bus_route_between_stops(
+            origin_stop["code"],
+            dest_stop["code"]
+        )
+        
+        if not routes:
+            return jsonify({
+                "error": f"No bus routes found between {origin_name} and {dest_name}"
+            }), 404
+        
+        # Step 5: Format response
+        response = {
+            "origin": {
+                "name": origin_name,
+                "address": origin_coords.get("address", ""),
+                "bus_stop": {
+                    "code": origin_stop["code"],
+                    "name": origin_stop["description"],
+                    "distance": origin_stop["distance"]
+                }
+            },
+            "destination": {
+                "name": dest_name,
+                "address": dest_coords.get("address", ""),
+                "bus_stop": {
+                    "code": dest_stop["code"],
+                    "name": dest_stop["description"],
+                    "distance": dest_stop["distance"]
+                }
+            },
+            "routes": routes,
+            "message": f"Found {len(routes)} route(s) from {origin_name} to {dest_name}"
+        }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        logger.error(f"Error in route planning: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed to plan route"}), 500
+
+
+# ======================================
+# SEND TEXT MESSAGE TO AMAZON LEX
+# ======================================
+@chatbot_bp.route("/api/chatbot/send-message", methods=["POST"])
+@login_required
+def send_message_to_lex():
+    try:
+        data = request.get_json() or {}
+        user_message = data.get("message", "")
+        user_id = session.get("user_id")
+        session_id = data.get("sessionId", str(user_id))
+        
+        if not user_message:
+            return jsonify({"error": "Message is required"}), 400
+        
+        # Check if this is a route planning query
+        if parse_route_query(user_message):
+            # Handle route planning directly
+            return route_planning()
+        
+        # Otherwise, send to Lex
+        if not lex_client:
+            return jsonify({"error": "Lex client not configured"}), 500
+        
+        response = lex_client.recognize_text(
+            botId=LEX_BOT_ID,
+            botAliasId=LEX_BOT_ALIAS_ID,
+            localeId=LEX_LOCALE_ID,
+            sessionId=session_id,
+            text=user_message
+        )
+        
+        logger.info(f"Lex response: {response}")
+        
+        # Extract bot messages
+        msgs = []
+        for m in response.get("messages", []):
+            msgs.append({
+                "type": "text",
+                "content": m.get("content", "")
+            })
+        
+        # Extract structured data
+        session_state = response.get("sessionState", {})
+        session_attrs = session_state.get("sessionAttributes", {})
+        structured_data_raw = session_attrs.get("responseData")
+        
+        result = {
+            "messages": msgs,
+            "intentName": session_state.get("intent", {}).get("name"),
+            "sessionId": session_id
+        }
+        
+        if structured_data_raw:
+            result["data"] = json.loads(structured_data_raw)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error sending to Lex: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed to process message"}), 500
+
+
+# ======================================
+# GET USER'S SAVED LOCATIONS
+# ======================================
+@chatbot_bp.route("/api/chatbot/user-locations", methods=["GET"])
+@login_required
+def get_user_locations():
+    """Get all saved locations for the current user"""
+    try:
+        user_id = session.get("user_id")
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        if IS_PRODUCTION:
+            cursor.execute("""
+                SELECT label, latitude, longitude, address, postal_code, is_favourite
+                FROM locations
+                WHERE user_id = %s
+                ORDER BY is_favourite DESC, label ASC
+            """, (user_id,))
+        else:
+            cursor.execute("""
+                SELECT label, latitude, longitude, address, postal_code, is_favourite
+                FROM locations
+                WHERE user_id = ?
+                ORDER BY is_favourite DESC, label ASC
+            """, (user_id,))
+        
+        locations = []
+        for row in cursor.fetchall():
+            if IS_PRODUCTION:
+                locations.append({
+                    "label": row["label"],
+                    "latitude": float(row["latitude"]),
+                    "longitude": float(row["longitude"]),
+                    "address": row["address"],
+                    "postal_code": row["postal_code"],
+                    "is_favourite": row["is_favourite"]
+                })
+            else:
+                locations.append({
+                    "label": row[0],
+                    "latitude": float(row[1]),
+                    "longitude": float(row[2]),
+                    "address": row[3],
+                    "postal_code": row[4],
+                    "is_favourite": bool(row[5])
+                })
+        
+        cursor.close()
         conn.close()
-        return {
-            'response': f"❌ No bus arrival data for {stop_name}.",
-            'type': 'error'
-        }
-    
-    # Get arrivals within 2 minutes of latest timestamp
-    from datetime import datetime, timedelta
-    
+        
+        return jsonify({"locations": locations})
+        
+    except Exception as e:
+        logger.error(f"Error getting user locations: {e}")
+        return jsonify({"error": "Failed to get locations"}), 500
+
+
+# ======================================
+# NEARBY STOPS (GPS) USING LEX INTENT
+# ======================================
+@chatbot_bp.route("/api/chatbot/nearby-stops", methods=["POST"])
+@login_required
+def chatbot_nearby_stops():
     try:
-        latest_time = datetime.fromisoformat(latest_time_result)
-        time_threshold = (latest_time - timedelta(minutes=2)).isoformat()
-    except:
-        time_threshold = latest_time_result
+        if not lex_client:
+            return jsonify({"error": "Lex client not configured"}), 500
+        
+        data = request.get_json() or {}
+        latitude = data.get("latitude")
+        longitude = data.get("longitude")
+        session_id = data.get("sessionId", str(session.get("user_id")))
+        
+        if latitude is None or longitude is None:
+            return jsonify({"error": "Latitude & longitude required"}), 400
+        
+        response = lex_client.recognize_text(
+            botId=LEX_BOT_ID,
+            botAliasId=LEX_BOT_ALIAS_ID,
+            localeId=LEX_LOCALE_ID,
+            sessionId=session_id,
+            text=f"Find stops near {latitude},{longitude}",
+            sessionState={
+                "intent": {
+                    "name": "FindNearbyStops",
+                    "slots": {
+                        "Latitude": {
+                            "shape": "Scalar",
+                            "value": {
+                                "originalValue": str(latitude),
+                                "interpretedValue": str(latitude),
+                                "resolvedValues": [str(latitude)]
+                            }
+                        },
+                        "Longitude": {
+                            "shape": "Scalar",
+                            "value": {
+                                "originalValue": str(longitude),
+                                "interpretedValue": str(longitude),
+                                "resolvedValues": [str(longitude)]
+                            }
+                        }
+                    }
+                }
+            }
+        )
+        
+        session_attrs = response.get("sessionState", {}).get("sessionAttributes", {})
+        data_raw = session_attrs.get("responseData")
+        
+        if data_raw:
+            return jsonify(json.loads(data_raw))
+        
+        return jsonify({"error": "No data returned"}), 404
+        
+    except Exception as e:
+        logger.error(f"Error getting nearby stops: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed to get nearby stops"}), 500
     
-    # Look for the specific bus
-    cursor.execute("""
-        SELECT service, eta_min, bus_type, timestamp
-        FROM bus_arrivals
-        WHERE stop_code = ? 
-          AND UPPER(service) = UPPER(?)
-          AND timestamp >= ?
-        ORDER BY timestamp DESC, eta_min ASC
-        LIMIT 3
-    """, (stop_code, bus_number, time_threshold))
-    
-    results = cursor.fetchall()
-    conn.close()
-    
-    if not results:
-        return {
-            'response': f"❌ Bus {bus_number} doesn't serve **{stop_name}** ({stop_code}), or no arrival data is currently available.\n\n"
-                       f"Try asking about the stop again to see which buses are available.",
-            'type': 'bus_not_found',
-            'stop_code': stop_code,
-            'stop_name': stop_name
-        }
-    
-    # Format the response
-    service, eta, bus_type, timestamp = results[0]
-    
-    def format_bus_type(bus_type):
-        if not bus_type:
-            return ""
-        bus_type_upper = bus_type.upper()
-        if bus_type_upper == 'SD':
-            return "🚌 Single Decker"
-        elif bus_type_upper == 'DD':
-            return "🚍 Double Decker"
-        elif bus_type_upper == 'BD':
-            return "🚐 Bendy Bus"
-        else:
-            return f"🚌 {bus_type}"
-    
-    # Format ETAs
-    etas = [row[1] for row in results]
-    formatted_etas = []
-    for eta_val in etas:
-        if eta_val < 1:
-            formatted_etas.append("**Arr**")
-        elif eta_val == 1:
-            formatted_etas.append("1 min")
-        else:
-            formatted_etas.append(f"{int(eta_val)} min")
-    
-    eta_text = " • ".join(formatted_etas)
-    bus_type_text = format_bus_type(bus_type)
-    
-    response_text = f"🚏 **{stop_name}** ({stop_code})\n\n"
-    response_text += f"🚌 **Bus {service}** - {bus_type_text}\n"
-    response_text += f"⏱️ {eta_text}\n\n"
-    
+@chatbot_bp.route("/api/chatbot/nearby-stops", methods=["POST"])
+@login_required
+def get_nearby_stops():
+    """Find bus stops near given coordinates"""
     try:
-        timestamp_obj = datetime.fromisoformat(latest_time_result)
-        formatted_time = timestamp_obj.strftime('%I:%M %p')
-    except:
-        formatted_time = latest_time_result
-    
-    response_text += f"🕒 Last updated: {formatted_time}"
-    
-    return {
-        'response': response_text,
-        'type': 'specific_bus',
-        'stop_code': stop_code,
-        'stop_name': stop_name
-    }
+        data = request.get_json() or {}
+        latitude = float(data.get('latitude'))
+        longitude = float(data.get('longitude'))
+        radius = 300  # 300 meters
+        
+        logger.info(f"Finding stops near {latitude}, {longitude} within {radius}m")
+        
+        # Calculate distance using Haversine formula
+        import math
+        
+        def haversine(lat1, lon1, lat2, lon2):
+            R = 6371000  # Earth radius in meters
+            phi1 = math.radians(lat1)
+            phi2 = math.radians(lat2)
+            dphi = math.radians(lat2 - lat1)
+            dlambda = math.radians(lon2 - lon1)
+            
+            a = math.sin(dphi/2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda/2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+            
+            return R * c
+        
+        # Get all bus stops from database
+        from database import get_bus_db_connection
+        conn = get_bus_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT code, description, lat, lon, road FROM bus_stops WHERE lat IS NOT NULL AND lon IS NOT NULL")
+        all_stops = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        # Find stops within radius
+        nearby_stops = []
+        for stop in all_stops:
+            # Handle both dict and tuple formats
+            if isinstance(stop, dict):
+                stop_code = stop['code']
+                stop_desc = stop['description']
+                stop_lat = float(stop['lat'])
+                stop_lon = float(stop['lon'])
+                stop_road = stop.get('road', '')
+            else:
+                stop_code = stop[0]
+                stop_desc = stop[1]
+                stop_lat = float(stop[2])
+                stop_lon = float(stop[3])
+                stop_road = stop[4] if len(stop) > 4 else ''
+            
+            distance = haversine(latitude, longitude, stop_lat, stop_lon)
+            
+            if distance <= radius:
+                nearby_stops.append({
+                    'code': stop_code,
+                    'description': stop_desc,
+                    'road': stop_road,
+                    'latitude': stop_lat,
+                    'longitude': stop_lon,
+                    'distance': int(distance)
+                })
+        
+        # Sort by distance
+        nearby_stops.sort(key=lambda x: x['distance'])
+        
+        logger.info(f"Found {len(nearby_stops)} stops within {radius}m")
+        
+        # Return in format expected by frontend
+        return jsonify({
+            'type': 'nearby_stops',
+            'stops': nearby_stops[:10]
+        })
+        
+    except Exception as e:
+        logger.error(f"Error finding nearby stops: {str(e)}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to find nearby stops. Please try again.'
+        }), 500
+
+@chatbot_bp.route("/api/chatbot/arrivals/<bus_stop_code>", methods=["GET"])
+@login_required
+def get_bus_arrivals_endpoint(bus_stop_code):
+    """Get bus arrivals for a specific bus stop"""
+    try:
+        logger.info(f"Getting arrivals for bus stop: {bus_stop_code}")
+        
+        # Get arrivals from LTA API
+        import requests
+        import os
+        from datetime import datetime, timezone, timedelta
+        
+        LTA_API_KEY = os.environ.get('LTA_API_KEY')
+        
+        if not LTA_API_KEY:
+            logger.error("LTA_API_KEY not set")
+            return jsonify({
+                'error': 'LTA API key not configured'
+            }), 500
+        
+        headers = {
+            'AccountKey': LTA_API_KEY,
+            'accept': 'application/json'
+        }
+        
+        response = requests.get(
+            'https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival',
+            headers=headers,
+            params={'BusStopCode': bus_stop_code},
+            timeout=10
+        )
+        
+        logger.info(f"LTA API status: {response.status_code}")
+        
+        if response.status_code == 401:
+            return jsonify({
+                'error': 'Invalid LTA API key'
+            }), 500
+        
+        if response.status_code != 200:
+            return jsonify({
+                'error': f'LTA API returned status {response.status_code}'
+            }), 500
+        
+        data = response.json()
+        services = data.get('Services', [])
+        
+        logger.info(f"Found {len(services)} services")
+        
+        # Format response
+        formatted_services = []
+        sg_tz = timezone(timedelta(hours=8))
+        now = datetime.now(sg_tz)
+        
+        for service in services:
+            buses = []
+            for bus_key in ['NextBus', 'NextBus2', 'NextBus3']:
+                bus = service.get(bus_key, {})
+                if bus and bus.get('EstimatedArrival'):
+                    eta_str = bus.get('EstimatedArrival')
+                    eta_time = datetime.fromisoformat(eta_str)
+                    diff_minutes = int((eta_time - now).total_seconds() / 60)
+                    
+                    if diff_minutes >= 0:
+                        buses.append({
+                            'eta': eta_str,
+                            'minutes_away': diff_minutes,
+                            'load': bus.get('Load', 'N/A'),
+                            'type': bus.get('Type', 'SD'),
+                            'feature': bus.get('Feature', '')
+                        })
+            
+            if buses:
+                formatted_services.append({
+                    'service_no': service.get('ServiceNo'),
+                    'operator': service.get('Operator'),
+                    'buses': buses
+                })
+        
+        return jsonify({
+            'arrivals': {
+                'services': formatted_services,
+                'message': 'No buses available' if not formatted_services else None
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting bus arrivals: {str(e)}", exc_info=True)
+        return jsonify({
+            'error': f'Failed to get arrivals: {str(e)}'
+        }), 500

@@ -1,186 +1,395 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<base href="{{ request.script_root }}/">
 <meta charset="UTF-8">
-<title>🧠 Bus Delay Insights – Stop {{ stop_code }}</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+<title>Smart Bus Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+
 <style>
-body {
-  font-family: "Segoe UI", Arial, sans-serif;
-  background: linear-gradient(180deg,#f7faff,#e7eff8);
-  color: #333;
-  text-align: center;
-  margin: 0;
-  padding: 0;
+:root {
+  --bg-gradient: linear-gradient(180deg, #eef3f8, #cfd8e6);
+  --text-color: #2c3e50;
+  --card-bg: #ffffff;
+  --table-head-bg: #2c3e50;
+  --header-bg: linear-gradient(180deg, #111827 0%, #1f2937 100%);
+  --accent: #626e70;
 }
-header {
-  background: linear-gradient(90deg,#0078d7,#00a6ff);
-  color: white;
-  padding: 15px 0;
-  font-size: 1.5em;
-  font-weight: 600;
-  box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+body.dark {
+  --bg-gradient: linear-gradient(180deg, #20232a, #181b1f);
+  --text-color: #e2e8f0;
+  --card-bg: #2b3037;
+  --table-head-bg: #3a3f47;
+  --accent: #8ecae6;
 }
-.container {
-  width: 90%;
-  margin: 25px auto;
-  background: rgba(255,255,255,0.98);
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}
-h2 { color: #0078d7; margin-bottom: 8px; }
-h3 { color: #666; font-weight: 500; margin-top: 0; }
+body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: var(--bg-gradient); color: var(--text-color); text-align: center; transition: background 0.4s, color 0.4s; }
 
-#gaugeWrapper {
-  width: 250px;
-  margin: 20px auto;
+/* AUTOCOMPLETE STYLES */
+.autocomplete { position: relative; display: inline-block; width: 100%; }
+.autocomplete-items {
+  position: absolute; border: 1px solid #d4d4d4; border-top: none; z-index: 99999;
+  top: 100%; left: 0; right: 0; background-color: var(--card-bg);
+  max-height: 200px; overflow-y: auto; border-radius: 0 0 10px 10px; text-align: left;
+}
+.autocomplete-items div { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; color: var(--text-color); }
+.autocomplete-items div:hover { background-color: #e9e9e9; color: black; }
+.autocomplete-active { background-color: DodgerBlue !important; color: #ffffff !important; }
+
+header { background: var(--header-bg); color: white; padding: 18px 0; font-size: 1.8em; font-weight: 600; display: flex; justify-content: center; align-items: center; gap: 20px; }
+#darkToggle { background: none; color: white; border: 2px solid white; border-radius: 50%; width: 38px; height: 38px; cursor: pointer; }
+
+#controls, #routeControls {
+  position: absolute; left: 50%; transform: translateX(-50%); z-index: 9999; width: 80%; max-width: 700px;
+  background: var(--card-bg); border-radius: 16px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); padding: 12px 20px; display: flex; gap: 12px;
+}
+#controls { top: 95px; }
+#routeControls { top: 160px; }
+
+input { flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid #ccc; background: var(--card-bg); color: var(--text-color); }
+button { border: none; border-radius: 8px; padding: 10px 18px; font-size: 15px; font-weight: 600; cursor: pointer; }
+button.search { background: var(--accent); color: white; }
+button.reset { background: #b0bec5; color: #2c3e50; }
+button.refresh { background: var(--accent); color: white; }
+
+#map { height: 65vh; width: 92%; margin: 110px auto 20px; border-radius: 12px; }
+
+.bus-card { background: var(--card-bg); width: 90%; margin: 25px auto; border-radius: 12px; padding: 20px; box-shadow: 0 3px 12px rgba(0,0,0,0.1); }
+
+/* COMPARE CARD FIXES */
+#compareContainer { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-top: 20px; }
+.compare-card {
+  background: var(--card-bg); border: 1px solid #ccc; border-radius: 12px; width: 300px; padding: 15px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15); display: flex; flex-direction: column;
 }
 
-.recommend-box {
-  background: #eef6ff;
-  border-left: 6px solid #0078d7;
-  border-radius: 10px;
-  padding: 14px 20px;
-  text-align: left;
-  margin-top: 20px;
-  line-height: 1.5;
-  font-size: 15px;
-  color: #444;
-}
-.recommend-box strong { color: #0078d7; }
-button {
-  margin-top: 25px;
-  background: #0078d7;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 16px;
-  font-size: 15px;
-  cursor: pointer;
-}
-button:hover { background: #005fa3; }
-
-canvas { margin-top: 25px; }
+.styled-table { border-collapse: collapse; width: 98%; margin: 15px auto; background: var(--card-bg); }
+.styled-table th { background: var(--table-head-bg); color: white; padding: 12px; }
+.styled-table td { padding: 10px; border-bottom: 1px solid #ddd; }
+.bus-badge { padding: 4px 8px; border-radius: 6px; color: white; font-weight: bold; }
+.soon { background: #27ae60; } .medium { background: #f1c40f; color: #222; } .late { background: #e74c3c; }
 </style>
 </head>
 
 <body>
-<header>🧠 Bus Delay Insights – Stop {{ stop_code }}</header>
+<script type="module">
+  import { createSidebar } from "/static/navbar.js"; 
+  createSidebar("bus"); 
+</script>
 
-<div class="container">
-  <h2>Average Delay Overview (Past 24 h)</h2>
-  <h3>Quick glance at bus performance by hour</h3>
-  
-  <div id="gaugeWrapper">
-    <canvas id="delayGauge"></canvas>
+<div class="content">
+<header>
+  Hi {{ session.username if session.username else 'Guest' }}! 👋
+  <button id="darkToggle" onclick="toggleDark()">🌙</button>
+</header>
+
+<div id="controls">
+  <div class="autocomplete">
+    <input id="query" placeholder="Search Bus Stop Name or Code">
+  </div>
+  <button class="search" onclick="searchStops()">Search</button>
+  <button class="reset" onclick="resetMap()">Reset</button>
+  <button class="reset" onclick="clearBusRoutes()" id="clearRouteBtn" style="display:none;">Clear Route</button>
+</div>
+
+<div id="routeControls">
+  <div class="autocomplete">
+    <input id="origin" placeholder="From (Code/Name)">
+  </div>
+  <div class="autocomplete">
+    <input id="destination" placeholder="To (Code/Name)">
+  </div>
+  <button class="search" onclick="calculateRoute()">Find Route</button>
+  <button class="reset" onclick="resetRoute()">Reset</button>
+</div>
+
+<div id="map"></div>
+
+<div class="bus-card">
+  <h3>Live Arrivals</h3>
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <div id="lastUpdate">Awaiting update...</div>
+    <button class="refresh" onclick="manualRefresh()">Refresh</button>
   </div>
 
-  <canvas id="heatMapChart" height="250"></canvas>
+  <table id="arrivalTable" class="styled-table">
+    <thead><tr><th>Bus</th><th>Next</th><th>Following</th><th>Last</th><th>Type</th></tr></thead>
+    <tbody id="arrivalBody"><tr><td colspan="5"><i>Select a stop on the map</i></td></tr></tbody>
+  </table>
 
-  <div class="recommend-box" id="recommendations">
-    <strong>🧭 Travel Recommendations:</strong>
-    <ul id="recList"><li>Loading insights...</li></ul>
+  <div id="favorites" style="margin-top:20px;">
+    <h3>Favorites</h3>
+    <div id="favList"></div>
   </div>
 
-  <button onclick="window.location.href='/bus'">← Back to Map</button>
+  <div id="routeSection" style="margin-top:20px;">
+    <h3>Fastest Routes</h3>
+    <div id="routeContainer" style="display:flex; flex-wrap:wrap; justify-content:center; gap:15px;"></div>
+  </div>
+
+  <div id="compareSection" style="margin-top:30px;">
+    <h3>Compare Stops</h3>
+    <div id="compareContainer"></div>
+  </div>
 </div>
 
 <script>
-// -------- Incoming data --------
-const chartData = {{ data | tojson | safe }};
-const allValues = Object.values(chartData).flatMap(s => s.map(p => p.y || 0));
-const avgDelay = allValues.length ? allValues.reduce((a,b)=>a+b,0)/allValues.length : 0;
+const map = L.map('map').setView([1.35,103.82],12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+const cluster = L.markerClusterGroup(); map.addLayer(cluster);
 
-// --------- Gauge (easy to read) ----------
-const gaugeCtx = document.getElementById("delayGauge");
-new Chart(gaugeCtx, {
-  type: 'doughnut',
-  data: {
-    labels: ['Delay', 'On Time'],
-    datasets: [{
-      data: [avgDelay, Math.max(0, 30-avgDelay)],
-      backgroundColor: ['#ff6b6b', '#b2f2bb'],
-      borderWidth: 0
-    }]
-  },
-  options: {
-    plugins: {
-      title: {
-        display: true,
-        text: `Avg Delay: ${avgDelay.toFixed(1)} min`,
-        font: { size: 16, weight: 'bold' }
-      },
-      legend: { display: false }
-    },
-    cutout: '70%'
-  }
-});
+let activeStop="", activeStopName="";
+let favoriteStops = [];
+let compareStops = [];
+let allStopsData = [];
+let routePolylines = [];
 
-// --------- Heat Map by Hour ----------
-const hours = Array.from({length:24},(_,i)=>i);
-const services = Object.keys(chartData);
-const datasets = services.map((svc,i)=>({
-  label: "Svc " + svc,
-  data: chartData[svc].map(p=>p.y),
-  backgroundColor: `hsla(${i*50},80%,60%,0.7)`
-}));
-
-const ctx = document.getElementById("heatMapChart").getContext("2d");
-new Chart(ctx, {
-  type: "bar",
-  data: { labels: hours, datasets },
-  options: {
-    responsive: true,
-    plugins: {
-      title: {
-        display: true,
-        text: "Hourly Delay Distribution",
-        font: { size: 16, weight: "bold" }
-      },
-      legend: { position: "bottom" },
-      tooltip: {
-        callbacks: {
-          label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} min`
+// --- AUTOCOMPLETE FUNCTION ---
+function autocomplete(inp, arr) {
+  let currentFocus;
+  inp.addEventListener("input", function(e) {
+      let a, b, i, val = this.value;
+      closeAllLists();
+      if (!val) return false;
+      currentFocus = -1;
+      a = document.createElement("DIV");
+      a.setAttribute("id", this.id + "autocomplete-list");
+      a.setAttribute("class", "autocomplete-items");
+      this.parentNode.appendChild(a);
+      
+      let count = 0;
+      for (i = 0; i < arr.length; i++) {
+        // Search by code OR description
+        if (arr[i].desc.toUpperCase().includes(val.toUpperCase()) || arr[i].code.includes(val)) {
+          if (count > 10) break;
+          count++;
+          b = document.createElement("DIV");
+          b.innerHTML = "<strong>" + arr[i].desc + "</strong> (" + arr[i].code + ")";
+          b.innerHTML += "<input type='hidden' value='" + arr[i].code + "'>";
+          b.addEventListener("click", function(e) {
+              inp.value = this.getElementsByTagName("input")[0].value;
+              closeAllLists();
+              if(inp.id === "query") searchStops(); // Auto-search on select
+          });
+          a.appendChild(b);
         }
       }
-    },
-    scales: {
-      x: {
-        title: { display: true, text: "Hour of Day (0–23)", color: "#0078d7" }
-      },
-      y: {
-        title: { display: true, text: "Avg ETA (min)", color: "#0078d7" },
-        beginAtZero: true
-      }
-    }
+  });
+  inp.addEventListener("keydown", function(e) {
+      let x = document.getElementById(this.id + "autocomplete-list");
+      if (x) x = x.getElementsByTagName("div");
+      if (e.keyCode == 40) { currentFocus++; addActive(x); }
+      else if (e.keyCode == 38) { currentFocus--; addActive(x); }
+      else if (e.keyCode == 13) { e.preventDefault(); if (currentFocus > -1 && x) x[currentFocus].click(); }
+  });
+  function addActive(x) {
+    if (!x) return false;
+    removeActive(x);
+    if (currentFocus >= x.length) currentFocus = 0;
+    if (currentFocus < 0) currentFocus = (x.length - 1);
+    x[currentFocus].classList.add("autocomplete-active");
   }
-});
+  function removeActive(x) { for (let i = 0; i < x.length; i++) x[i].classList.remove("autocomplete-active"); }
+  function closeAllLists(elmnt) {
+    let x = document.getElementsByClassName("autocomplete-items");
+    for (let i = 0; i < x.length; i++) { if (elmnt != x[i] && elmnt != inp) x[i].parentNode.removeChild(x[i]); }
+  }
+  document.addEventListener("click", function (e) { closeAllLists(e.target); });
+}
 
-// ---------- Smart Travel Insights ----------
-const recList = document.getElementById("recList");
-recList.innerHTML = "";
-if (avgDelay < 10)
-  recList.innerHTML += "<li>✅ Buses are mostly <strong>on schedule</strong>.</li>";
-else if (avgDelay < 20)
-  recList.innerHTML += "<li>🕒 Minor delays expected — plan 5 min earlier.</li>";
-else
-  recList.innerHTML += "<li>⚠️ Heavy congestion likely — check alternatives.</li>";
+// --- INITIALIZATION ---
+async function loadAllStops(){
+ const res = await fetch("bus_stops");
+ allStopsData = await res.json();
+ 
+ // Attach autocomplete to inputs
+ autocomplete(document.getElementById("query"), allStopsData);
+ autocomplete(document.getElementById("origin"), allStopsData);
+ autocomplete(document.getElementById("destination"), allStopsData);
 
-const hr = new Date().getHours();
-if (hr >= 7 && hr <= 9)
-  recList.innerHTML += "<li>🌅 Morning peak — expect higher passenger volume.</li>";
-else if (hr >= 17 && hr <= 20)
-  recList.innerHTML += "<li>🌇 Evening rush — buses may be crowded.</li>";
-else
-  recList.innerHTML += "<li>🌙 Off-peak hours — smoother rides, faster trips.</li>";
+ cluster.clearLayers();
+ allStopsData.forEach(s=>{
+   const m = L.marker([s.lat,s.lon]).bindPopup(`
+     <b>${s.code}</b><br>${s.desc}<br>
+     <button onclick="loadArrivals('${s.code}','${s.desc}')">Arrivals</button>
+     <button onclick="addFavorite('${s.code}','${s.desc}')">Fav</button>
+     <button onclick="addCompare('${s.code}','${s.desc}')">Compare</button>`);
+   cluster.addLayer(m);
+ });
+ loadFavoritesFromDB();
+ loadUserSavedLocations();
+}
+loadAllStops();
 
-const m = new Date().getMonth()+1;
-if ([11,12,1].includes(m))
-  recList.innerHTML += "<li>🎄 Holiday period — family and tourist traffic may increase waits.</li>";
-if ([5,6].includes(m))
-  recList.innerHTML += "<li>🏖️ School holidays — expect mid-day surges.</li>";
+// --- ROUTE DRAWING ---
+async function showSingleBusRoute(serviceNo, currentStopCode) {
+    clearBusRoutes();
+    try {
+        // Safe fetch for analytics
+        let analytics = null;
+        try { const a = await fetch(`/api/bus_analytics/${serviceNo}`); if(a.ok) analytics = await a.json(); } catch(e){}
+
+        const res = await fetch(`/api/bus_route/${serviceNo}/${currentStopCode}`);
+        const data = await res.json();
+        
+        if (!data.full_route) return alert("Route not found");
+
+        const latlngs = data.full_route.map(s => [s.lat, s.lon]);
+        
+        // Draw Blue Line
+        const polyline = L.polyline(latlngs, { color: 'blue', weight: 5 }).addTo(map);
+        routePolylines.push(polyline);
+        map.fitBounds(polyline.getBounds());
+        
+        displayRouteInfo(serviceNo, data.stops_remaining, data.full_route[0].description, analytics);
+        document.getElementById('clearRouteBtn').style.display = 'inline-block';
+    } catch(e) { console.log(e); alert("Error loading route"); }
+}
+
+function displayRouteInfo(svc, remaining, start, analytics) {
+    const div = document.createElement('div');
+    div.id = 'routeInfoPanel';
+    div.style.cssText = "position:fixed; top:220px; right:20px; background:white; padding:15px; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.2); z-index:1000; width:250px; text-align:center;";
+    
+    let statusHTML = analytics ? `<div style="margin-top:5px; color:${analytics.status_color}">Status: ${analytics.status}</div>` : "";
+    
+    div.innerHTML = `
+        <h3 style="margin:0;">Bus ${svc}</h3>
+        <h2 style="margin:5px 0; color:#e74c3c;">${remaining} stops</h2>
+        <small>From: ${start}</small>
+        ${statusHTML}
+        <button onclick="clearBusRoutes()" style="margin-top:10px; padding:5px 10px;">Close</button>
+    `;
+    document.body.appendChild(div);
+}
+
+function clearBusRoutes() {
+    routePolylines.forEach(p => map.removeLayer(p));
+    routePolylines = [];
+    const panel = document.getElementById('routeInfoPanel');
+    if(panel) panel.remove();
+    document.getElementById('clearRouteBtn').style.display = 'none';
+}
+
+// --- ROUTE FINDER ---
+async function calculateRoute() {
+  const origin = document.getElementById("origin").value;
+  const dest = document.getElementById("destination").value;
+  if (!origin || !dest) return alert("Please enter locations");
+
+  const res = await fetch("/api/route", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ origin, destination: dest })
+  });
+  const data = await res.json();
+  
+  const container = document.getElementById("routeContainer");
+  container.innerHTML = "";
+  
+  if (data.routes && data.routes.length) {
+    data.routes.forEach((r, i) => {
+      const card = document.createElement("div");
+      card.className = "compare-card";
+      let legsHTML = r.legs.map(l => `<li>Bus ${l.service}: ${l.from} → ${l.to}</li>`).join("");
+      card.innerHTML = `<h4>Option ${i+1}: ${r.estimated_time_min} min</h4><ul>${legsHTML}</ul>`;
+      container.appendChild(card);
+    });
+  } else { container.innerHTML = "<p>No routes found.</p>"; }
+}
+
+// --- ARRIVALS & COMPARE ---
+function getETA(val){
+  if(val===undefined) return "-";
+  if(val < 1) return '<span class="bus-badge soon">Arr</span>';
+  return `<span class="bus-badge medium">${Math.round(val)}</span>`;
+}
+
+async function loadArrivals(code, desc){
+ activeStop=code; activeStopName=desc;
+ const res=await fetch(`/bus_arrivals/${code}`);
+ const data=await res.json();
+ const body=document.getElementById('arrivalBody');
+ if(data.length===0) { body.innerHTML="<tr><td colspan='5'>No buses</td></tr>"; return; }
+
+ body.innerHTML = data.map(b => `
+    <tr>
+      <td><a href="#" onclick="showSingleBusRoute('${b.service}', '${code}')" style="color:blue; text-decoration:underline;">${b.service}</a></td>
+      <td>${getETA(b.eta[0])}</td>
+      <td>${getETA(b.eta[1])}</td>
+      <td>${getETA(b.eta[2])}</td>
+      <td>${b.type||"SD"}</td>
+    </tr>
+ `).join("");
+ document.getElementById('lastUpdate').innerText = "Updated: " + new Date().toLocaleTimeString();
+}
+
+async function addCompare(code, desc) {
+    if(compareStops.find(s=>s.code===code)) return alert("Already added");
+    compareStops.push({code, desc});
+    refreshCompare();
+}
+
+async function refreshCompare() {
+    const container = document.getElementById("compareContainer");
+    container.innerHTML = "";
+    for (let stop of compareStops) {
+        const res = await fetch(`/bus_arrivals/${stop.code}`);
+        const data = await res.json();
+        const card = document.createElement("div");
+        card.className = "compare-card";
+        card.innerHTML = `
+            <div style="display:flex; justify-content:space-between;">
+                <b>${stop.desc}</b>
+                <span style="cursor:pointer; color:red;" onclick="removeCompare('${stop.code}')">X</span>
+            </div>
+            <table class="styled-table">
+                <thead><tr><th>Bus</th><th>Next</th></tr></thead>
+                <tbody>
+                    ${data.slice(0,4).map(b => `<tr><td>${b.service}</td><td>${getETA(b.eta[0])}</td></tr>`).join("")}
+                </tbody>
+            </table>`;
+        container.appendChild(card);
+    }
+}
+function removeCompare(code) { compareStops = compareStops.filter(s=>s.code!==code); refreshCompare(); }
+
+// --- FAVORITES ---
+async function loadFavoritesFromDB() {
+    try { const res = await fetch('/api/bus_favorites'); favoriteStops = await res.json(); renderFavorites(); } catch(e){}
+}
+async function addFavorite(code, desc) { await fetch('/api/bus_favorites/add', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({code,desc})}); loadFavoritesFromDB(); }
+async function removeFavorite(code) { await fetch('/api/bus_favorites/remove', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({code})}); loadFavoritesFromDB(); }
+function renderFavorites(){
+    document.getElementById("favList").innerHTML = favoriteStops.map(f => 
+        `<span style="background:#eee; padding:5px 10px; margin:5px; border-radius:15px; cursor:pointer; display:inline-block;" onclick="loadArrivals('${f.code}','${f.desc}')">
+            ${f.desc} <span style="color:red" onclick="event.stopPropagation(); removeFavorite('${f.code}')">&times;</span>
+        </span>`).join("");
+}
+
+// --- UTILS ---
+function manualRefresh(){ if(activeStop) loadArrivals(activeStop,activeStopName); refreshCompare(); }
+setInterval(manualRefresh, 60000);
+async function loadUserSavedLocations() {
+    const res = await fetch('/api/user_locations');
+    const locs = await res.json();
+    locs.forEach(l => L.marker([l.lat, l.lng]).bindPopup(`<b>${l.label}</b><br>${l.address}`).addTo(map));
+}
+function searchStops(){
+    const val = document.getElementById('query').value;
+    const found = allStopsData.find(s => s.code == val || s.desc == val);
+    if(found) { map.setView([found.lat, found.lon], 16); loadArrivals(found.code, found.desc); } 
+    else alert("Stop not found");
+}
+function resetMap(){ map.setView([1.35,103.82],12); document.getElementById('query').value=''; activeStop=''; document.getElementById('arrivalBody').innerHTML=""; clearBusRoutes(); }
+function resetRoute(){ document.getElementById('origin').value=''; document.getElementById('destination').value=''; document.getElementById('routeContainer').innerHTML=''; clearBusRoutes(); }
+function toggleDark(){ document.body.classList.toggle('dark'); }
 </script>
+</div>
 </body>
 </html>
