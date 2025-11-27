@@ -445,53 +445,184 @@ def bus_dashboard():
 
 # API to get users favorite locations and show on the smart bus dashboard
 @app.route("/api/user_locations")
-@login_required
 def get_user_locations():
-    """API endpoint to get current user's saved locations"""
-    user = current_user()
-    if not user:
-        return jsonify([])
-    # Use get_db_connection from database.py
+    """Get user's saved locations from PostgreSQL"""
+    
+    # TEMPORARY: Hardcode user_id = 7 for now
+    user_id = 7
+    
+    print(f"[DEBUG] Getting locations for user_id: {user_id}")
+    
+    # Connect to PostgreSQL
     conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
+        # Get locations for this user
         if IS_PRODUCTION:
-            # PostgreSQL uses %s
             cursor.execute("""
                 SELECT id, label, latitude, longitude, address, postal_code, is_favourite
                 FROM locations
                 WHERE user_id = %s
                 ORDER BY is_favourite DESC, id DESC
-            """, (user["id"],))
+            """, (user_id,))
         else:
-            # SQLite uses ?
             cursor.execute("""
                 SELECT id, label, latitude, longitude, address, postal_code, is_favourite
                 FROM locations
                 WHERE user_id = ?
                 ORDER BY is_favourite DESC, id DESC
-            """, (user["id"],))
+            """, (user_id,))
         
-        locations = []
-        for row in cursor.fetchall():
-            locations.append({
-                "id": row["id"],
-                "label": row["label"],
-                "lat": row["latitude"],
-                "lng": row["longitude"],
-                "address": row["address"] if row["address"] else "",
-                "postal_code": row["postal_code"] if row["postal_code"] else "",
-                "is_favourite": bool(row["is_favourite"])
-            })
+        rows = cursor.fetchall()
+        print(f"[DEBUG] Found {len(rows)} locations")
+        
+        # CRITICAL: Check if rows are dicts or tuples
+        if rows and isinstance(rows[0], dict):
+            # Using RealDictCursor - access by key
+            locations = []
+            for row in rows:
+                locations.append({
+                    "id": row['id'],
+                    "label": row['label'],
+                    "latitude": float(row['latitude']) if row['latitude'] else None,
+                    "longitude": float(row['longitude']) if row['longitude'] else None,
+                    "address": row['address'],
+                    "postal_code": row['postal_code'],
+                    "is_favourite": bool(row['is_favourite'])
+                })
+        else:
+            # Using regular cursor - access by index
+            locations = []
+            for row in rows:
+                locations.append({
+                    "id": row[0],
+                    "label": row[1],
+                    "latitude": float(row[2]) if row[2] else None,
+                    "longitude": float(row[3]) if row[3] else None,
+                    "address": row[4],
+                    "postal_code": row[5],
+                    "is_favourite": bool(row[6])
+                })
         
         cursor.close()
         conn.close()
+        
+        print(f"[DEBUG] Returning {len(locations)} locations")
+        for loc in locations:
+            print(f"[DEBUG] Location: {loc['label']} at ({loc['latitude']}, {loc['longitude']})")
+        
         return jsonify(locations)
+        
     except Exception as e:
-        print(f"Error fetching user locations: {e}")
-        conn.close()
+        print(f"[ERROR] Exception in get_user_locations: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            cursor.close()
+            conn.close()
+        except:
+            pass
         return jsonify([])
+
+@app.route("/api/nearby_bus_stops")
+def get_nearby_bus_stops():
+    """Get bus stops near a given location"""
+    
+    try:
+        latitude = float(request.args.get("latitude"))
+        longitude = float(request.args.get("longitude"))
+        radius_km = float(request.args.get("radius", 0.5))
+    except (TypeError, ValueError) as e:
+        print(f"[ERROR] Invalid parameters: {e}")
+        return jsonify({"success": False, "error": "Invalid parameters"}), 400
+    
+    print(f"[DEBUG] Searching for bus stops near ({latitude}, {longitude}) within {radius_km}km")
+    
+    try:
+        # Connect to SQLite bus database
+        bus_db_path = os.path.join(BASE_DIR, "database", "bus_data.db")
+        
+        if not os.path.exists(bus_db_path):
+            print(f"[ERROR] Bus database not found at {bus_db_path}")
+            return jsonify({"success": False, "error": "Bus database not found"}), 500
+        
+        bus_conn = sqlite3.connect(bus_db_path)
+        bus_cursor = bus_conn.cursor()
+        
+        # FIXED: Use correct table and column names
+        bus_cursor.execute("""
+            SELECT code, description, lat, lon, road
+            FROM bus_stops
+            WHERE lat IS NOT NULL AND lon IS NOT NULL
+        """)
+        
+        all_stops = bus_cursor.fetchall()
+        bus_conn.close()
+        
+        print(f"[DEBUG] Total bus stops in database: {len(all_stops)}")
+        
+        # Calculate distances using Haversine formula
+        from math import radians, sin, cos, sqrt, atan2
+        
+        nearby_stops = []
+        R = 6371.0  # Earth radius in km
+        
+        for stop in all_stops:
+            stop_code, description, stop_lat, stop_lon, road_name = stop
+            
+            try:
+                stop_lat = float(stop_lat)
+                stop_lon = float(stop_lon)
+            except:
+                continue
+            
+            # Singapore bounds check
+            if not (1.0 <= stop_lat <= 1.5 and 103.5 <= stop_lon <= 104.1):
+                continue
+            
+            # Haversine distance calculation
+            lat1 = radians(latitude)
+            lon1 = radians(longitude)
+            lat2 = radians(stop_lat)
+            lon2 = radians(stop_lon)
+            
+            dlat = lat2 - lat1
+            dlon = lon2 - lon1
+            
+            a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+            c = 2 * atan2(sqrt(a), sqrt(1-a))
+            distance = R * c
+            
+            if distance <= radius_km:
+                nearby_stops.append({
+                    "BusStopCode": stop_code,
+                    "Description": description,
+                    "Latitude": stop_lat,
+                    "Longitude": stop_lon,
+                    "RoadName": road_name or "N/A",
+                    "Distance": round(distance, 3)
+                })
+        
+        # Sort by distance and limit to 20
+        nearby_stops.sort(key=lambda x: x["Distance"])
+        nearby_stops = nearby_stops[:20]
+        
+        print(f"[DEBUG] Found {len(nearby_stops)} bus stops within {radius_km}km")
+        
+        return jsonify({
+            "success": True,
+            "location": {"latitude": latitude, "longitude": longitude},
+            "radius_km": radius_km,
+            "count": len(nearby_stops),
+            "stops": nearby_stops
+        })
+        
+    except Exception as e:
+        print(f"[ERROR] Exception in get_nearby_bus_stops: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # ==================== BUS FAVORITES API ====================
 # Get user's favorite bus stops
@@ -622,14 +753,12 @@ def remove_bus_favorite():
 traffic_last_update = ""
 
 # Traffic database - PostgreSQL in production, SQLite in development
-if os.getenv('FLASK_ENV') == 'production' or IS_PRODUCTION:
-    # PostgreSQL for production
-    db_url = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:5432/{os.getenv('DB_NAME')}"
-    traffic_engine = create_engine(db_url, future=True)
-    print("✅ Using PostgreSQL for traffic data (Production)")
+TRAFFIC_DB_FILE = os.path.join(BASE_DIR, "database/TrafficIncidents.db")
+traffic_engine = create_engine(f"sqlite:///{TRAFFIC_DB_FILE}", future=True)
+
+if IS_PRODUCTION:
+    print("✅ Using SQLite for traffic data (Production - Local Cache)")
 else:
-    # SQLite for local development
-    traffic_engine = create_engine("sqlite:///database/TrafficIncidents.db", future=True)
     print("✅ Using SQLite for traffic data (Development)")
 
 traffic_metadata = MetaData()
@@ -931,7 +1060,7 @@ def get_bus_route(service_no, bus_stop_code):
         # If current stop is not found in list 
         if not matching_stops:
             conn.close()
-            return jsonify({"error": f"Bus stop {bus_stop_code} not found on rute"}), 404
+            return jsonify({"error": f"Bus stop {bus_stop_code} not found on route"}), 404
         
         print(f"✅ Found {len(matching_stops)} direction(s) for stop {bus_stop_code}")
 
@@ -1084,7 +1213,7 @@ if __name__ == "__main__":
         print("🌐 Running unified app at http://localhost:5000")
         print("📍 Traffic Dashboard: http://localhost:5000/traffic")
         print("🚌 Bus Dashboard: http://localhost:5000/bus")
-        print("💡 If the Fpage doesn't load, check that port 5000 is available")
+        print("💡 If the page doesn't load, check that port 5000 is available")
         
         app.run(host="127.0.0.1", port=5000, debug=True, use_reloader=False)
     except OSError as e:

@@ -343,19 +343,49 @@ body.dark .leaflet-routing-container a {
   <button id="darkToggle" onclick="toggleDark()">🌙</button>
 </header>
 
-<div id="controls">
-  <input id="query" placeholder="Enter bus stop code or road name">
+<div id="controls" style="
+  position: absolute;
+  top: 95px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  width: 85%;
+  max-width: 1100px;
+  background: var(--card-bg);
+  border-radius: 16px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+  padding: 12px 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;">
+  
+  <!-- Search Input -->
+  <input id="query" placeholder="Enter bus stop code or road name" 
+         style="flex: 0.8; min-width: 150px; padding: 10px 14px; border-radius: 10px; border: 1px solid #ccc;">
+  
+  <!-- Search Buttons -->
   <button class="search" onclick="searchStops()">Search</button>
   <button class="reset" onclick="resetMap()">Reset</button>
-  <button class="reset" onclick="clearBusRoutes()" id="clearRouteBtn" style="display:none;">
-    Clear Route
-  </button>
+  <button class="reset" onclick="clearBusRoutes()" id="clearRouteBtn" style="display:none;">Clear Route</button>
+  
+  <!-- Divider -->
+  <div style="width: 2px; height: 40px; background: #ddd; margin: 0 10px;"></div>
+  
+  <!-- Saved Locations Section -->
+  <div id="savedLocationsSection" style="display: none; align-items: center; gap: 8px;">
+      <span style="font-size: 13px; font-weight: 600; color: #2c3e50; white-space: nowrap;">
+          Saved Locations:
+      </span>
+      <div id="savedLocationButtons" style="display: flex; flex-wrap: nowrap; gap: 6px;"></div>
+  </div>
+  
 </div>
 
 <!-- 🧭 Route Calculator Panel -->
 <div id="routeControls" style="
   position: absolute;
-  top: 160px;
+  top: 170px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 9999;
@@ -806,6 +836,18 @@ async function loadArrivals(code, desc){
  const data=await res.json();
  const body=document.getElementById('arrivalBody');
 
+ // ✅ Check for errors first
+ if (data.error) {
+   body.innerHTML=`<tr><td colspan='5' style='color:red;'><i>Error: ${data.error}</i></td></tr>`;
+   return;
+ }
+
+ // ✅ Check if data is an array
+ if (!Array.isArray(data)) {
+   body.innerHTML=`<tr><td colspan='5' style='color:red;'><i>Invalid data received</i></td></tr>`;
+   return;
+ }
+
  // Make bus service numbers clickable
  body.innerHTML=data.length?data.map(b=>`
     <tr>
@@ -822,11 +864,10 @@ async function loadArrivals(code, desc){
       <td>${getETA(b.eta[2])}</td>
       <td>${b.type||"Unknown"}</td>
     </tr>`
-  ).join(""):"<tr><td colspan='5'><i>No data available.</i></td></tr>";
+  ).join(""):"<tr><td colspan='5'><i>No buses arriving soon.</i></td></tr>";
   
   document.getElementById('lastUpdate').innerText="Last updated: "+new Date().toLocaleTimeString();
 }
-
 function manualRefresh(){ if(activeStop) loadArrivals(activeStop,activeStopName); }
 setInterval(()=>{ if(activeStop) loadArrivals(activeStop,activeStopName); refreshCompare(); },60000);
 
@@ -881,7 +922,7 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
         const option = document.createElement('option');
         option.value = stop.stop_code;
         option.textContent = `${stop.stop_code} - ${stop.description}`;
-        destinationDropdown.appendChild(option); //append options ot drop down 
+        destinationDropdown.appendChild(option); //append options to drop down 
       });
       
       // Adding event listener to dropdown
@@ -896,7 +937,6 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
     // Set origin bus stop input
     document.getElementById('origin').value = `${currentStopCode}`;
     
-    // For full route
     // Build array of coordinates for waypoints
     const routeCoordinates = [];
     const stopMarkers = [];
@@ -976,7 +1016,7 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
     const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`; //API call for OSRM 
     
     let distance = null;
-    let duration = null; 
+    let duration = null;
 
     // Fetch route geometry from OSRM
     const osrmResponse = await fetch(osrmUrl);
@@ -1001,7 +1041,7 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
       
       // Create polyline following actual roads
       const routePolyline = L.polyline(leafletCoords, {
-        color: '#FF5733',      // Orange-red color
+        color: routeColor,      // Color based on analytics
         weight: 6,             // Line thickness
         opacity: 0.8,          // Slight transparency
         smoothFactor: 1.0,     // Smoothing
@@ -1041,16 +1081,16 @@ async function showSingleBusRoute(serviceNo, currentStopCode) {
     currentRouteService = serviceNo;
 
     // Pass correct first stop description
-    const firstStop = fullRoute.find(s => s.is_current, );
+    const firstStop = fullRoute.find(s => s.is_current);
 
     // Journey data for analytics display if distance and duration is given 
-    let journeyData = (distance && duration) ?  {
-    distance: distance,  // calculated above
-    duration: duration   // calculated above
-  } : null;
+    let journeyData = (distance && duration) ? {
+      distance: distance,
+      duration: duration
+    } : null;
     
     // Create and display route information panel
-    displayRouteInfo(serviceNo, stopsRemaining, firstStop?.description || fullRoute[0]?.description, null, analyticsData, journeyData=null);
+    displayRouteInfo(serviceNo, stopsRemaining, firstStop?.description || fullRoute[0]?.description, null, analyticsData, journeyData);
     
     // Show clear route button
     const clearBtn = document.getElementById('clearRouteBtn');
@@ -1123,7 +1163,7 @@ async function showRouteToDestination(serviceNo, currentStopCode, destinationSto
             shadowSize: [41, 41]
           });
         } else if (index === routeSegment.length - 1) {
-          // Destination stop - ORANGE (brown-ish)
+          // Destination stop - ORANGE
           markerIcon = L.icon({
             iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
             shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
@@ -1174,8 +1214,8 @@ async function showRouteToDestination(serviceNo, currentStopCode, destinationSto
     const coords = routeCoordinates.map(c => `${c[1]},${c[0]}`).join(';');
     const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
 
-    let distance = null
-    let duration = null
+    let distance = null;
+    let duration = null;
     
     const osrmResponse = await fetch(osrmUrl);
     const osrmData = await osrmResponse.json();
@@ -1187,14 +1227,14 @@ async function showRouteToDestination(serviceNo, currentStopCode, destinationSto
       let routeColor = '#FF5733';
       if (analyticsData && analyticsData.found) {
         const drift = Math.abs(analyticsData.avg_eta_drift);
-        // if (drift >= 30) routeColor = '#dc2626';
-        // else if (drift >= 20) routeColor = '#ea580c';
-        // else if (drift >= 10) routeColor = '#d97706';
-        // else routeColor = '#059669';
+        if (drift >= 30) routeColor = '#dc2626';
+        else if (drift >= 20) routeColor = '#ea580c';
+        else if (drift >= 10) routeColor = '#d97706';
+        else routeColor = '#059669';
       }
       
       const routePolyline = L.polyline(leafletCoords, {
-        color: '#FF5733',
+        color: routeColor,
         weight: 6,
         opacity: 0.8,
         smoothFactor: 1.0,
@@ -1226,8 +1266,8 @@ async function showRouteToDestination(serviceNo, currentStopCode, destinationSto
 
     //Create journey data object (only if distance/duration exist)
     let journeyData = (distance && duration) ? {
-    distance: distance,  // Already calculated above
-    duration: duration   // Already calculated above
+      distance: distance,
+      duration: duration
     } : null;
 
     // Update info panel
@@ -1299,6 +1339,7 @@ function displayRouteInfo(serviceNo, stopsRemaining, currentStopName, destinatio
       `}
     </div>
   `;
+
   // Journey Analytics Section 
   let journeyAnalyticsHTML = '';
   if (journeyData && journeyData.distance && journeyData.duration) {
@@ -1334,7 +1375,7 @@ function displayRouteInfo(serviceNo, stopsRemaining, currentStopName, destinatio
     `;
   }
 
-  // Service analytics section HTML
+  // Build analytics section HTML
   let analyticsHTML = '';
   if (analytics && analytics.found) {
     analyticsHTML = `
@@ -1529,6 +1570,169 @@ function resetMap(){
   loadAllStops();
 }
 updateFavDisplay();
+
+// ==================== SAVED LOCATIONS FUNCTIONALITY ====================
+async function loadSavedLocations() {
+    console.log('[SAVED LOCATIONS] Loading...');
+    
+    try {
+        const response = await fetch('/api/user_locations');
+        
+        if (!response.ok) {
+            console.error('[SAVED LOCATIONS] API response not OK:', response.status);
+            return;
+        }
+        
+        const locations = await response.json();
+        console.log('[SAVED LOCATIONS] Received:', locations);
+        
+        const section = document.getElementById('savedLocationsSection');
+        
+        if (locations && locations.length > 0) {
+            console.log(`[SAVED LOCATIONS] Displaying ${locations.length} locations`);
+            displaySavedLocationButtons(locations);
+            section.style.display = 'flex';
+        } else {
+            console.log('[SAVED LOCATIONS] No locations found, hiding section');
+            section.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('[SAVED LOCATIONS] Error:', error);
+        document.getElementById('savedLocationsSection').style.display = 'none';
+    }
+}
+
+function displaySavedLocationButtons(locations) {
+    const container = document.getElementById('savedLocationButtons');
+    container.innerHTML = '';
+    
+    locations.forEach(location => {
+        const button = document.createElement('button');
+        button.textContent = location.label;
+        button.onclick = () => showNearbyBusStops(location);
+        
+        button.style.cssText = `
+            padding: 8px 16px;
+            background: ${location.is_favourite ? '#ffa726' : '#42a5f5'};
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+        `;
+        
+        button.onmouseover = () => button.style.background = location.is_favourite ? '#ff9800' : '#1e88e5';
+        button.onmouseout = () => button.style.background = location.is_favourite ? '#ffa726' : '#42a5f5';
+        
+        container.appendChild(button);
+    });
+    
+    console.log(`[SAVED LOCATIONS] Created ${container.children.length} buttons`);
+}
+
+/**
+ * Show nearby bus stops when a saved location is clicked
+ */
+async function showNearbyBusStops(location) {
+    try {
+        const lat = location.latitude;
+        const lon = location.longitude;
+        
+        if (!lat || !lon) {
+            alert(`Missing coordinates for ${location.label}`);
+            return;
+        }
+        
+        showLoadingMessage(`Loading bus stops near ${location.label}...`);
+        
+        const response = await fetch(`/api/nearby_bus_stops?latitude=${lat}&longitude=${lon}&radius=0.5`);
+        const data = await response.json();
+        
+        if (!data.success || data.stops.length === 0) {
+            alert(`No bus stops found within 500m of ${location.label}`);
+            hideLoadingMessage();
+            return;
+        }
+        
+        // Clear only bus stop markers from cluster
+        cluster.clearLayers();
+        
+        // Re-add ALL saved location markers (so they stay visible)
+        if (savedLocationMarkers && savedLocationMarkers.length > 0) {
+            savedLocationMarkers.forEach(marker => {
+                map.addLayer(marker); // Add back to map, NOT cluster
+            });
+        }
+        
+        // Add marker for the CLICKED saved location (highlighted with star)
+	const locationIcon = L.icon({
+   	    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',
+   	    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+    	    iconSize: [25, 41],
+    	    iconAnchor: [12, 41],
+    	    popupAnchor: [1, -34],
+   	    shadowSize: [41, 41]
+	});
+        
+        const clickedLocationMarker = L.marker([lat, lon], { icon: locationIcon }).addTo(map);
+        clickedLocationMarker.bindPopup(`
+            <div style="font-weight: bold; color: #ff9800; font-size: 14px;">${location.label}</div>
+            <div style="font-size: 12px; margin-top: 4px;">${location.address || 'Saved Location'}</div>
+        `);
+        
+        // Add nearby bus stops to cluster
+        data.stops.forEach(stop => {
+            const marker = L.marker([stop.Latitude, stop.Longitude]);
+            
+            marker.bindPopup(`
+                <b>${stop.BusStopCode}</b><br><b>${stop.Description}</b><br>${stop.RoadName}
+                <button onclick="loadArrivals('${stop.BusStopCode}','${stop.Description}')">Show Arrivals</button>
+                <button onclick="addFavorite('${stop.BusStopCode}','${stop.Description}')">Add Favs</button>
+                <button onclick="addCompare('${stop.BusStopCode}','${stop.Description}')">Compare</button>
+            `);
+            
+            cluster.addLayer(marker);
+        });
+        
+        // Fit map to show clicked location and nearby stops
+        const bounds = L.latLngBounds([
+            [lat, lon],
+            ...data.stops.map(stop => [stop.Latitude, stop.Longitude])
+        ]);
+        map.fitBounds(bounds, { padding: [50, 50] });
+        
+        hideLoadingMessage();
+        
+    } catch (error) {
+        console.error('[ERROR] Error showing nearby bus stops:', error);
+        alert(`Error loading bus stops: ${error.message}`);
+        hideLoadingMessage();
+    }
+}
+
+function showLoadingMessage(message) {
+    let loadingDiv = document.getElementById('loadingMessage');
+    if (!loadingDiv) {
+        loadingDiv = document.createElement('div');
+        loadingDiv.id = 'loadingMessage';
+        document.body.appendChild(loadingDiv);
+    }
+    loadingDiv.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0, 0, 0, 0.8); color: white; padding: 20px 40px; border-radius: 8px; z-index: 10000; font-size: 16px; text-align: center;';
+    loadingDiv.innerHTML = message;
+}
+
+function hideLoadingMessage() {
+    const loadingDiv = document.getElementById('loadingMessage');
+    if (loadingDiv) loadingDiv.remove();
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(loadSavedLocations, 1000);
+});
+
 </script>
 </body>
 </div>
