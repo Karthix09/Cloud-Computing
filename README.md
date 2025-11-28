@@ -111,6 +111,7 @@ Create a `.env` file (or update the existing one) with values for:
 * `API_KEY` – LTA DataMall API key
 * `BASE_URL`, `TRAFFIC_API_URL` – LTA endpoints
 * `SECRET_KEY` – Flask secret key
+* `GOOGLE_MAPS_API_KEY` – Google Maps JavaScript + Places API key (used on the Settings page for address autocomplete)
 
 For production with PostgreSQL on RDS, also set:
 
@@ -151,7 +152,25 @@ By default the app listens on `http://127.0.0.1:5000/`.
 
 ---
 
-## ☁️ Production Deployment (AWS Overview)
+### Google Maps API key (Settings page)
+
+The **User Settings** page uses the Google Maps JavaScript API + Places Autocomplete to let users search for an address/postal code and save the corresponding latitude/longitude, full address and postal code.
+
+To use this feature:
+
+1. In the **Google Cloud Console**, create an API key.
+2. Enable the following APIs for the project:
+   - **Maps JavaScript API**
+   - **Places API**
+3. Under **API key restrictions**:
+   - Set **Application restrictions** to **HTTP referrers (web sites)**.
+   - Add at least these referrers for local development:
+     - `http://localhost:5000/*`
+     - `http://127.0.0.1:5000/*`
+4. Set the key in your environment (for example in `.env`):
+
+   ```env
+   GOOGLE_MAPS_API_KEY=YOUR_ACTUAL_KEY_HERE
 
 ## ☁️ Production Deployment (AWS Overview)
 
