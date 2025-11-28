@@ -180,22 +180,22 @@ def find_nearest_bus_stop(latitude, longitude):
         return None
 
 
-def get_bus_route_between_stops(origin_code, destination_code):
-    """
-    Get bus routes between two stops using your existing routing engine
-    Returns: list of routes or None
-    """
-    try:
-        # Import your routing function from app.py
-        # You'll need to make this available
-        from app import dijkstra_multi_wrapper
+# def get_bus_route_between_stops(origin_code, destination_code):
+#     """
+#     Get bus routes between two stops using your existing routing engine
+#     Returns: list of routes or None
+#     """
+#     try:
+#         # Import your routing function from app.py
+#         # You'll need to make this available
+#         from app import dijkstra_multi_wrapper
         
-        routes = dijkstra_multi_wrapper(origin_code, destination_code)
-        return routes
+#         routes = dijkstra_multi_wrapper(origin_code, destination_code)
+#         return routes
         
-    except Exception as e:
-        logger.error(f"Error getting bus routes: {e}")
-        return None
+#     except Exception as e:
+#         logger.error(f"Error getting bus routes: {e}")
+#         return None
 
 
 def parse_route_query(message):

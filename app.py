@@ -1049,7 +1049,7 @@ def get_bus_route(service_no, bus_stop_code):
             return jsonify({"error": "Route not found"}), 404
             
         # Normalize stop code to string (remove any whitespace, ensure consistent format)
-        bus_stop_code = str(bus_stop_code).strip()
+        bus_stop_code = str(bus_stop_code).strip()                    
 
         # Find ALL occurrences of current stop (handles interchanges)
         matching_stops = []
