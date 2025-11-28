@@ -126,6 +126,26 @@ For the chatbot (if used):
 
 For local development you can run entirely on SQLite; RDS is only needed for a full cloud deployment.
 
+### Google Maps API key (Settings page)
+
+The **User Settings** page uses the Google Maps JavaScript API + Places Autocomplete to let users search for an address/postal code and save the corresponding latitude/longitude, full address and postal code.
+
+To use this feature:
+
+1. In the **Google Cloud Console**, create an API key.
+2. Enable the following APIs for the project:
+   - **Maps JavaScript API**
+   - **Places API**
+3. Under **API key restrictions**:
+   - Set **Application restrictions** to **HTTP referrers (web sites)**.
+   - Add at least these referrers for local development:
+     - `http://localhost:5000/*`
+     - `http://127.0.0.1:5000/*`
+4. Set the key in your environment (for example in `.env`):
+
+   ```env
+   GOOGLE_MAPS_API_KEY=YOUR_ACTUAL_KEY_HERE
+
 ### 5. Initialise databases
 
 ```bash
@@ -151,26 +171,6 @@ flask run
 By default the app listens on `http://127.0.0.1:5000/`.
 
 ---
-
-### Google Maps API key (Settings page)
-
-The **User Settings** page uses the Google Maps JavaScript API + Places Autocomplete to let users search for an address/postal code and save the corresponding latitude/longitude, full address and postal code.
-
-To use this feature:
-
-1. In the **Google Cloud Console**, create an API key.
-2. Enable the following APIs for the project:
-   - **Maps JavaScript API**
-   - **Places API**
-3. Under **API key restrictions**:
-   - Set **Application restrictions** to **HTTP referrers (web sites)**.
-   - Add at least these referrers for local development:
-     - `http://localhost:5000/*`
-     - `http://127.0.0.1:5000/*`
-4. Set the key in your environment (for example in `.env`):
-
-   ```env
-   GOOGLE_MAPS_API_KEY=YOUR_ACTUAL_KEY_HERE
 
 ## ☁️ Production Deployment (AWS Overview)
 
