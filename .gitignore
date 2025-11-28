@@ -3,7 +3,7 @@ database/
 *.db
 database/
 
-# Virtual Environments (NEVER COMMIT THESE!)
+# Virtual Environments 
 .venv/
 venv/
 env/
