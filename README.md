@@ -1,141 +1,182 @@
-# 🚀 Transport Analytics Application
+# 🚀 Smart Transport Intelligence Hub (STIH)
 
-A comprehensive Singapore transport analytics platform providing real-time bus arrivals, traffic incidents, and intelligent route planning.
+A cloud-based Singapore transport analytics platform that combines **real-time bus arrivals**, **traffic incidents**, **historical delay analytics**, and an **AI-powered assistant** into a single web application.
 
-## Features
+---
 
-- 🚌 **Real-time Bus Arrivals**: Live bus timing from LTA DataMall
-- 🚧 **Traffic Monitoring**: Current traffic incidents across Singapore
-- 🤖 **AI Chatbot**: Intelligent bus timing assistant
-- 📊 **Analytics**: Historical bus delay patterns
-- 👤 **User Profiles**: Save favorite locations and bus stops
+## 🌟 Key Features
 
-## Tech Stack
+- 🚌 **Real-time Bus Arrivals**  
+  Live bus timings from **LTA DataMall**, displayed on an interactive Singapore map.
 
-- **Backend**: Flask (Python 3.10+)
-- **Database**: PostgreSQL (Production), SQLite (Development)
-- **Frontend**: HTML, CSS, JavaScript
-- **APIs**: LTA DataMall, Google Maps
-- **Deployment**: AWS (EC2, RDS, ALB, Auto Scaling)
+- 🚧 **Traffic Monitoring**  
+  Current traffic incidents visualised on a map and summarised in charts.
 
-## Local Development Setup
+- 📊 **Bus Delay Analytics**  
+  Historical bus arrival snapshots aggregated with **Spark on AWS EMR** into datasets such as:
+  - Average ETA by hour  
+  - Median ETA by service  
+  - Drift / volatility metrics and Top-10 “worst” services  
 
-### Prerequisites
+- 🤖 **AI Assistant (Chatbot)**  
+  AWS Lex–backed chatbot that can:
+  - Check bus arrivals at a stop  
+  - Find nearby bus stops based on a location  
+  - Use your saved locations in natural language queries  
+  (A prototype route-planning flow is included and may be extended in future work.)
 
-- Python 3.10 or higher
-- pip (Python package manager)
-- Virtual environment (recommended)
+- 👤 **User Accounts & Personalisation**  
+  Login / registration, saved locations (e.g. “Home”, “School”) and favourite bus stops for quick access.
 
-### Installation
+---
 
-1. **Clone the repository**
+## 🧱 Tech Stack
+
+- **Backend**
+  - Python 3.10+  
+  - Flask (web framework)  
+  - Gunicorn (production WSGI server)  
+  - SQLite (development & bus data cache)  
+  - PostgreSQL on Amazon RDS (production user data)
+
+- **Frontend**
+  - HTML5, CSS3, JavaScript  
+  - Leaflet.js + MarkerCluster for interactive maps  
+  - Leaflet Routing Machine + OSRM for bus route visualisation  
+  - Chart.js / Plotly for analytics and traffic visualisations  
+
+- **Cloud & Data**
+  - Amazon EC2, Application Load Balancer, VPC, Security Groups  
+  - Amazon RDS (PostgreSQL)  
+  - Amazon EMR + Spark for batch analytics  
+  - Amazon S3 for raw and processed datasets  
+  - Amazon CloudWatch for logs and metrics  
+  - Amazon Lex V2 for the chatbot  
+  - External APIs: LTA DataMall, OneMap, OpenStreetMap tiles  
+
+---
+
+## 📂 Project Structure
+
+```text
+Cloud-Computing/
+├── app.py               # Main Flask application (dashboards, APIs)
+├── auth.py              # Authentication (login, register, bcrypt)
+├── chatbot.py           # Chatbot blueprint + Lex integration
+├── charts.py            # Analytics dashboard blueprint
+├── config.py            # App configuration (dev/production)
+├── data_collector.py    # Standalone bus-arrivals collector (optional)
+├── database.py          # DB abstraction (SQLite vs PostgreSQL + schema)
+├── gunicorn_config.py   # Gunicorn production config
+├── M2-bigdata/          # Spark notebooks and EMR analytics scripts
+├── templates/           # Jinja2 templates (bus, traffic, charts, chatbot, auth)
+├── static/              # CSS, JS, images, and pre-computed CSV datasets
+├── requirements.txt     # Python dependencies
+└── wsgi.py              # WSGI entrypoint for Gunicorn / ALB
+````
+
+---
+
+## 🛠️ Local Development
+
+### 1. Clone the repository
+
 ```bash
-   git clone <your-repo-url>
-   cd PROJECTV1
+git clone https://github.com/Karthix09/Cloud-Computing.git
+cd Cloud-Computing
 ```
 
-2. **Create virtual environment**
+### 2. Create and activate a virtual environment
+
 ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# macOS / Linux
+source venv/bin/activate
 ```
 
-3. **Install dependencies**
+### 3. Install dependencies
+
 ```bash
-   pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
-4. **Set up environment variables**
+### 4. Configure environment variables
+
+Create a `.env` file (or update the existing one) with values for:
+
+* `API_KEY` – LTA DataMall API key
+* `BASE_URL`, `TRAFFIC_API_URL` – LTA endpoints
+* `SECRET_KEY` – Flask secret key
+
+For production with PostgreSQL on RDS, also set:
+
+* `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
+
+For the chatbot (if used):
+
+* `LEX_BOT_ID`
+* `LEX_BOT_ALIAS_ID`
+* `LEX_LOCALE_ID`
+* `AWS_REGION`
+
+For local development you can run entirely on SQLite; RDS is only needed for a full cloud deployment.
+
+### 5. Initialise databases
+
 ```bash
-   cp .env.example .env
-   # Edit .env with your API keys and configuration
+python -c "from database import init_users_db, init_bus_db; init_users_db(); init_bus_db()"
 ```
 
-5. **Initialize database**
+This creates the required tables in the local SQLite databases.
+
+### 6. Run the application (development)
+
 ```bash
-   python database.py
+# Windows
+set FLASK_ENV=development
+
+# macOS / Linux
+export FLASK_ENV=development
+
+python app.py
+# or
+flask run
 ```
 
-6. **Run the application**
-```bash
-   python app.py
-```
+By default the app listens on `http://127.0.0.1:5000/`.
 
-7. **Access the application**
-   - Open browser: `http://localhost:5000`
-   - Default account: Register a new user
+---
 
-## Production Deployment (AWS)
+## ☁️ Production Deployment (AWS Overview)
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed AWS deployment instructions.
+A typical production deployment uses:
 
-### Quick Deploy Steps
+* **EC2** instances running the Flask app via Gunicorn
+* An **Application Load Balancer (ALB)** in front of EC2
+* **RDS PostgreSQL** for user-related data
+* **S3** for raw and processed bus-arrival datasets
+* **EMR** for Spark-based analytics
+* **Lex V2** for chatbot intents and fulfilment
+* **CloudWatch** for logs and metrics
 
-1. Set up RDS PostgreSQL database
-2. Launch EC2 instance(s)
-3. Configure Application Load Balancer
-4. Set up Auto Scaling Group
-5. Configure environment variables
-6. Deploy application code
+See the project report or Appendix A (if applicable) for full architecture diagrams and cost breakdown.
 
-## Project Structure
-```
-PROJECTV1/
-├── app.py                  # Main Flask application
-├── auth.py                 # Authentication module
-├── chatbot.py              # Chatbot functionality
-├── database.py             # Database connections
-├── config.py               # Configuration management
-├── wsgi.py                 # WSGI entry point
-├── requirements.txt        # Python dependencies
-├── static/                 # CSS, JS, images
-├── templates/              # HTML templates
-└── database/               # Local database files
-```
+---
 
-## Environment Variables
+## 📜 License
 
-Required environment variables:
+This project is currently for academic purposes (INF2006 Cloud Computing & Big Data, Singapore Institute of Technology).
+If you plan to publish or open-source it, add a proper license (e.g. MIT) here.
 
-- `SECRET_KEY`: Flask secret key
-- `API_KEY`: LTA DataMall API key
-- `DB_HOST`: Database host (RDS endpoint for production)
-- `DB_PASSWORD`: Database password
+---
 
-## API Endpoints
+## 🙏 Acknowledgements
 
-### Bus Module
-- `GET /bus` - Bus dashboard
-- `GET /bus_stops` - Search bus stops
-- `GET /bus_arrivals/<code>` - Get bus arrivals
-
-### Traffic Module
-- `GET /traffic` - Traffic dashboard
-- `GET /traffic_pie_chart` - Traffic analytics
-
-### Authentication
-- `POST /login` - User login
-- `POST /register` - User registration
-- `GET /logout` - User logout
-
-## Contributing
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. Open Pull Request
-
-## License
-
-This project is licensed under the MIT License.
-
-## Contact
-
-Project Link: [https://github.com/your-username/transport-analytics](https://github.com/your-username/transport-analytics)
-
-## Acknowledgments
-
-- LTA DataMall for public transport data
-- Google Maps Platform
-- AWS for cloud infrastructure
+* **LTA DataMall** – public transport data
+* **OpenStreetMap** & OSRM – mapping and routing
+* **OneMap** – Singapore geocoding and mapping
+* **AWS** – cloud infrastructure for compute, storage and analytics
