@@ -7,6 +7,7 @@ class Config:
     # API Keys
     API_KEY = os.getenv('API_KEY')
     TRAFFIC_API_KEY = os.getenv('TRAFFIC_API_KEY') or os.getenv('API_KEY')
+    GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
     
     # Database Configuration
     DB_HOST = os.getenv('DB_HOST', 'localhost')

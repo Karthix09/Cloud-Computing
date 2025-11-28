@@ -183,7 +183,7 @@
       <!-- Add Location Section -->
       <div class="section">
         <h3>Add New Location</h3>
-        <form method="post" action="/add_location">
+        <form method="post" action="/add_location" onsubmit="return validateLocation();">
           <label>Label</label>
           <input type="text" name="label" placeholder="e.g. Home, Work" required>
 
@@ -292,7 +292,7 @@
 
   <!-- Load Google Maps API with callback at the end -->
   <script async defer
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDqQ73BXm5hIMOBJ1UBkDeLPs0Kkig2ffE&libraries=places&callback=initMap">
+    src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places&callback=initMap">
   </script>
 </body>
 </html>

@@ -243,8 +243,17 @@ def settings():
         locs = cursor.fetchall()
         cursor.close()
         conn.close()
-        
-        return render_template("settings.html", user=user, locations=locs)
+
+        # NEW: read key from environment
+        import os
+        google_maps_api_key = os.getenv("GOOGLE_MAPS_API_KEY")
+
+        return render_template(
+            "settings.html",
+            user=user,
+            locations=locs,
+            google_maps_api_key=google_maps_api_key,
+        )
     except Exception as e:
         print(f"❌ Settings error: {e}")
         traceback.print_exc()

@@ -1,12 +1,11 @@
 import os, sqlite3, requests, threading, time, re
 from datetime import datetime
-from flask import Flask, jsonify, render_template, request, redirect, url_for, session
+from flask import Flask, jsonify, render_template, request, redirect, url_for, session, current_app
 from dotenv import load_dotenv
 import pandas as pd
 import folium
 from sqlalchemy import create_engine, Table, Column, String, Float, MetaData, DateTime
 from charts import charts_bp
-
 
 # Import auth module
 from database import init_users_db, init_bus_db, get_db_connection, get_bus_db_connection, IS_PRODUCTION
@@ -1190,6 +1189,18 @@ def get_bus_route(service_no, bus_stop_code):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/settings")
+@login_required
+def settings():
+    user = get_current_user()
+    locations = get_user_locations(user["id"])
+    google_maps_api_key = current_app.config.get("GOOGLE_MAPS_API_KEY")
+    return render_template(
+        "settings.html",
+        user=user,
+        locations=locations,
+        google_maps_api_key=google_maps_api_key,
+    )
 
 # ==================== MAIN ====================
 if __name__ == "__main__":
